@@ -1,0 +1,95 @@
+.mode-selector {
+  padding: 1rem;
+  border-top: 1px solid #333;
+  background-color: #2a2a2a;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.mode-selector-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.mode-selector-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mode-button {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  background-color: #3a3a3a;
+  color: rgba(255, 255, 255, 0.87);
+  border: 1px solid #444;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.mode-button:hover:not(:disabled) {
+  background-color: #444;
+  border-color: #555;
+}
+
+.mode-button.active {
+  background-color: #646cff;
+  border-color: #646cff;
+  color: white;
+}
+
+.mode-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.mode-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #666;
+  transition: background-color 0.3s ease;
+}
+
+.status-indicator.active {
+  background-color: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+.status-indicator.inactive {
+  background-color: #ef4444;
+}
+
+.status-text {
+  font-size: 0.85rem;
+}
+
+.config-button {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  width: 100%;
+  background-color: #3a3a3a;
+  color: rgba(255, 255, 255, 0.87);
+  border: 1px solid #444;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+}
+
+.config-button:hover {
+  background-color: #444;
+  border-color: #555;
+}

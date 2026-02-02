@@ -1,0 +1,180 @@
+.config-editor-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.config-editor-modal {
+  background-color: #2a2a2a;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 700px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.config-editor-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid #333;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.config-editor-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: rgba(255, 255, 255, 0.87);
+}
+
+.config-editor-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 2rem;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.config-editor-close:hover {
+  background-color: #444;
+}
+
+.config-editor-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+.config-editor-error {
+  background-color: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: rgba(239, 68, 68, 0.9);
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.config-section {
+  margin-bottom: 2rem;
+}
+
+.config-section h3 {
+  color: rgba(255, 255, 255, 0.87);
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #444;
+}
+
+.config-subsection {
+  margin-top: 1rem;
+  padding-left: 1rem;
+  border-left: 2px solid #444;
+}
+
+.config-subsection h4 {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.config-field {
+  margin-bottom: 1rem;
+}
+
+.config-field label {
+  display: block;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.config-field input[type='text'],
+.config-field input[type='number'],
+.config-field input[type='password'],
+.config-field select {
+  width: 100%;
+  padding: 0.5rem;
+  background-color: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.87);
+  font-size: 0.9rem;
+  transition: border-color 0.2s ease;
+}
+
+.config-field input:focus,
+.config-field select:focus {
+  outline: none;
+  border-color: #646cff;
+}
+
+.config-field input[type='checkbox'] {
+  margin-right: 0.5rem;
+  width: auto;
+}
+
+.config-field label:has(input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.config-editor-footer {
+  padding: 1.5rem;
+  border-top: 1px solid #333;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.config-editor-footer button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+}
+
+.config-editor-footer button:not(.config-save-button) {
+  background-color: #444;
+  color: rgba(255, 255, 255, 0.87);
+}
+
+.config-editor-footer button:not(.config-save-button):hover {
+  background-color: #555;
+}
+
+.config-save-button {
+  background-color: #646cff;
+  color: white;
+}
+
+.config-save-button:hover:not(:disabled) {
+  background-color: #535bf2;
+}
+
+.config-editor-footer button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
