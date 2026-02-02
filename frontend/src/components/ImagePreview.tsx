@@ -28,6 +28,37 @@ export function ImagePreview({ image, onFullscreenClick }: ImagePreviewProps) {
     }
   }, [image]);
 
+  // Constrain pan to keep image within bounds
+  const constrainPan = useCallback((panX: number, panY: number, currentZoom: number) => {
+    if (!imageRef.current || !containerRef.current) return { x: panX, y: panY };
+    
+    const container = containerRef.current;
+    const img = imageRef.current;
+    
+    const containerRect = container.getBoundingClientRect();
+    const containerWidth = containerRect.width;
+    const containerHeight = containerRect.height;
+    
+    // Get image natural dimensions
+    const imgNaturalWidth = img.naturalWidth;
+    const imgNaturalHeight = img.naturalHeight;
+    
+    // Calculate displayed image size
+    const imgDisplayWidth = imgNaturalWidth * currentZoom;
+    const imgDisplayHeight = imgNaturalHeight * currentZoom;
+    
+    // Calculate bounds
+    const minX = Math.min(0, containerWidth - imgDisplayWidth);
+    const maxX = 0;
+    const minY = Math.min(0, containerHeight - imgDisplayHeight);
+    const maxY = 0;
+    
+    return {
+      x: Math.max(minX, Math.min(maxX, panX)),
+      y: Math.max(minY, Math.min(maxY, panY)),
+    };
+  }, []);
+
   // Handle wheel zoom with passive: false - zoom towards mouse cursor
   useEffect(() => {
     const container = containerRef.current;
@@ -64,7 +95,9 @@ export function ImagePreview({ image, onFullscreenClick }: ImagePreviewProps) {
           const newPanX = mouseX - imageX * newZoom;
           const newPanY = mouseY - imageY * newZoom;
           
-          return { x: newPanX, y: newPanY };
+          // Constrain pan to keep image visible
+          const constrained = constrainPan(newPanX, newPanY, newZoom);
+          return constrained;
         });
         
         return newZoom;
@@ -76,7 +109,7 @@ export function ImagePreview({ image, onFullscreenClick }: ImagePreviewProps) {
     return () => {
       container.removeEventListener('wheel', handleWheel);
     };
-  }, [image]);
+  }, [image, constrainPan]);
 
   // Handle mouse drag start
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -92,10 +125,12 @@ export function ImagePreview({ image, onFullscreenClick }: ImagePreviewProps) {
 
     const handleMouseMove = (e: MouseEvent) => {
       e.preventDefault();
-      setPan({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y,
-      });
+      const newPanX = e.clientX - dragStart.x;
+      const newPanY = e.clientY - dragStart.y;
+      
+      // Constrain pan to keep image visible
+      const constrained = constrainPan(newPanX, newPanY, zoom);
+      setPan(constrained);
     };
 
     const handleMouseUp = () => {
@@ -109,7 +144,7 @@ export function ImagePreview({ image, onFullscreenClick }: ImagePreviewProps) {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, dragStart, zoom]);
+  }, [isDragging, dragStart, zoom, constrainPan]);
 
   // Handle mouse drag end - now handled in useEffect
 
@@ -144,6 +179,18 @@ export function ImagePreview({ image, onFullscreenClick }: ImagePreviewProps) {
     setZoom(1);
     setPan({ x: 0, y: 0 });
   }, []);
+
+  // Constrain pan when zoom changes (e.g., from button clicks)
+  useEffect(() => {
+    if (zoom <= 1) {
+      setPan({ x: 0, y: 0 });
+      return;
+    }
+    
+    setPan((currentPan) => {
+      return constrainPan(currentPan.x, currentPan.y, zoom);
+    });
+  }, [zoom, constrainPan]);
 
   // Zoom in
   const handleZoomIn = useCallback(() => {
