@@ -19,16 +19,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  padding: 0;
   cursor: default;
+  box-sizing: border-box;
 }
 
 .fullscreen-overlay-img {
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  border-radius: 4px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  object-position: center;
+  border-radius: 0;
+  box-shadow: none;
   transition: opacity 0.3s ease;
   display: block;
 }
@@ -95,11 +97,11 @@
 }
 
 .fullscreen-nav-prev {
-  left: 2rem;
+  left: 1rem;
 }
 
 .fullscreen-nav-next {
-  right: 2rem;
+  right: 1rem;
 }
 
 .fullscreen-nav-button svg {

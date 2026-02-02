@@ -31,33 +31,22 @@
 
 .image-preview-container {
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
   overflow: hidden;
   background-color: #1a1a1a;
   position: relative;
   user-select: none;
   -webkit-user-select: none;
-  touch-action: pan-x pan-y;
+  touch-action: none;
 }
 
 .image-preview-img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+  width: auto;
+  height: auto;
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   transition: opacity 0.3s ease;
-  cursor: grab;
   user-select: none;
   -webkit-user-select: none;
-  pointer-events: auto;
-}
-
-.image-preview-img:active {
-  cursor: grabbing;
 }
 
 .image-preview-img.loading {
