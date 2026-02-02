@@ -11,202 +11,161 @@ interface ImagePreviewProps {
 export function ImagePreview({ image, onFullscreenClick }: ImagePreviewProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
-  const [zoom, setZoom] = useState(1);
+  const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [fitScale, setFitScale] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const lastPointerRef = useRef({ x: 0, y: 0 });
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Calculate the scale that fits the image within the container
+  const calculateFitScale = useCallback(() => {
+    if (!imageRef.current || !containerRef.current) return 1;
+    const img = imageRef.current;
+    const rect = containerRef.current.getBoundingClientRect();
+    if (img.naturalWidth === 0 || img.naturalHeight === 0) return 1;
+    const scaleX = rect.width / img.naturalWidth;
+    const scaleY = rect.height / img.naturalHeight;
+    return Math.min(scaleX, scaleY, 1);
+  }, []);
+
+  // Calculate pan values that center the image at a given scale
+  const calculateCenteredPan = useCallback((s: number) => {
+    if (!imageRef.current || !containerRef.current) return { x: 0, y: 0 };
+    const img = imageRef.current;
+    const rect = containerRef.current.getBoundingClientRect();
+    return {
+      x: (rect.width - img.naturalWidth * s) / 2,
+      y: (rect.height - img.naturalHeight * s) / 2,
+    };
+  }, []);
+
+  // Reset state when image changes
   useEffect(() => {
     if (image) {
       setImageError(false);
       setImageLoading(true);
-      // Reset zoom and pan when image changes
-      setZoom(1);
+      setScale(1);
       setPan({ x: 0, y: 0 });
+      setFitScale(1);
     }
   }, [image]);
 
-  // Constrain pan to keep image within bounds
-  const constrainPan = useCallback((panX: number, panY: number, currentZoom: number) => {
-    if (!imageRef.current || !containerRef.current) return { x: panX, y: panY };
-    
-    const container = containerRef.current;
-    const img = imageRef.current;
-    
-    const containerRect = container.getBoundingClientRect();
-    const containerWidth = containerRect.width;
-    const containerHeight = containerRect.height;
-    
-    // Get image natural dimensions
-    const imgNaturalWidth = img.naturalWidth;
-    const imgNaturalHeight = img.naturalHeight;
-    
-    // Calculate displayed image size
-    const imgDisplayWidth = imgNaturalWidth * currentZoom;
-    const imgDisplayHeight = imgNaturalHeight * currentZoom;
-    
-    // Calculate bounds
-    const minX = Math.min(0, containerWidth - imgDisplayWidth);
-    const maxX = 0;
-    const minY = Math.min(0, containerHeight - imgDisplayHeight);
-    const maxY = 0;
-    
-    return {
-      x: Math.max(minX, Math.min(maxX, panX)),
-      y: Math.max(minY, Math.min(maxY, panY)),
-    };
-  }, []);
+  // Fit and center when image finishes loading
+  useEffect(() => {
+    if (!imageLoading && imageRef.current && containerRef.current) {
+      const fs = calculateFitScale();
+      setFitScale(fs);
+      setScale(fs);
+      setPan(calculateCenteredPan(fs));
+    }
+  }, [imageLoading, calculateFitScale, calculateCenteredPan]);
 
-  // Handle wheel zoom with passive: false - zoom towards mouse cursor
+  // Wheel zoom toward mouse cursor position
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !image) return;
+    if (!container || !image || imageLoading) return;
 
     const handleWheel = (e: WheelEvent) => {
-      if (!imageRef.current || !container) return;
-      
       e.preventDefault();
       e.stopPropagation();
-      
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      
-      // Get current zoom and pan using functional updates
-      setZoom((currentZoom) => {
-        const newZoom = Math.max(0.5, Math.min(5, currentZoom + delta));
-        
-        // Get container bounds
-        const containerRect = container.getBoundingClientRect();
-        
-        // Get mouse position relative to container
-        const mouseX = e.clientX - containerRect.left;
-        const mouseY = e.clientY - containerRect.top;
-        
-        // Get current pan
-        setPan((currentPan) => {
-          // Calculate the point on the image that the mouse is pointing at
-          // This is in the image's coordinate system before zoom
-          const imageX = (mouseX - currentPan.x) / currentZoom;
-          const imageY = (mouseY - currentPan.y) / currentZoom;
-          
-          // After zoom, we want this same point to be under the mouse
-          // So we adjust the pan
-          const newPanX = mouseX - imageX * newZoom;
-          const newPanY = mouseY - imageY * newZoom;
-          
-          // Constrain pan to keep image visible
-          const constrained = constrainPan(newPanX, newPanY, newZoom);
-          return constrained;
-        });
-        
-        return newZoom;
+
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+
+      setScale((prev) => {
+        const next = Math.max(fitScale * 0.5, Math.min(10, prev * zoomFactor));
+        const ratio = next / prev;
+        setPan((p) => ({
+          x: mouseX - (mouseX - p.x) * ratio,
+          y: mouseY - (mouseY - p.y) * ratio,
+        }));
+        return next;
       });
     };
 
     container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [image, imageLoading, fitScale]);
 
-    return () => {
-      container.removeEventListener('wheel', handleWheel);
-    };
-  }, [image, constrainPan]);
-
-  // Handle mouse drag start
+  // Mouse drag - start
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (zoom <= 1) return; // Only allow drag when zoomed in
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(true);
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-  }, [zoom, pan]);
+    lastPointerRef.current = { x: e.clientX, y: e.clientY };
+  }, []);
 
-  // Handle mouse drag - use global mouse move
+  // Mouse drag - move & release (global listeners)
   useEffect(() => {
-    if (!isDragging || zoom <= 1) return;
+    if (!isDragging) return;
 
     const handleMouseMove = (e: MouseEvent) => {
       e.preventDefault();
-      const newPanX = e.clientX - dragStart.x;
-      const newPanY = e.clientY - dragStart.y;
-      
-      // Constrain pan to keep image visible
-      const constrained = constrainPan(newPanX, newPanY, zoom);
-      setPan(constrained);
+      const dx = e.clientX - lastPointerRef.current.x;
+      const dy = e.clientY - lastPointerRef.current.y;
+      lastPointerRef.current = { x: e.clientX, y: e.clientY };
+      setPan((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
     };
 
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
+    const handleMouseUp = () => setIsDragging(false);
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, dragStart, zoom, constrainPan]);
+  }, [isDragging]);
 
-  // Handle mouse drag end - now handled in useEffect
-
-  // Handle touch start (for mobile swipe)
+  // Touch drag
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (zoom <= 1) return;
-    if (e.touches.length === 1) {
-      const touch = e.touches[0];
-      setIsDragging(true);
-      setDragStart({ x: touch.clientX - pan.x, y: touch.clientY - pan.y });
-    }
-  }, [zoom, pan]);
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    setIsDragging(true);
+    lastPointerRef.current = { x: t.clientX, y: t.clientY };
+  }, []);
 
-  // Handle touch move (for mobile swipe)
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isDragging || zoom <= 1 || e.touches.length !== 1) return;
+    if (!isDragging || e.touches.length !== 1) return;
     e.preventDefault();
-    const touch = e.touches[0];
-    setPan({
-      x: touch.clientX - dragStart.x,
-      y: touch.clientY - dragStart.y,
-    });
-  }, [isDragging, dragStart, zoom]);
+    const t = e.touches[0];
+    const dx = t.clientX - lastPointerRef.current.x;
+    const dy = t.clientY - lastPointerRef.current.y;
+    lastPointerRef.current = { x: t.clientX, y: t.clientY };
+    setPan((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
+  }, [isDragging]);
 
-  // Handle touch end
-  const handleTouchEnd = useCallback(() => {
-    setIsDragging(false);
-  }, []);
+  const handleTouchEnd = useCallback(() => setIsDragging(false), []);
 
-  // Reset zoom and pan
+  // Reset to fit view
   const handleReset = useCallback(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-  }, []);
+    setScale(fitScale);
+    setPan(calculateCenteredPan(fitScale));
+  }, [fitScale, calculateCenteredPan]);
 
-  // Constrain pan when zoom changes (e.g., from button clicks)
-  useEffect(() => {
-    if (zoom <= 1) {
-      setPan({ x: 0, y: 0 });
-      return;
-    }
-    
-    setPan((currentPan) => {
-      return constrainPan(currentPan.x, currentPan.y, zoom);
+  // Zoom toward container center (for +/- buttons)
+  const zoomToCenter = useCallback((factor: number) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    setScale((prev) => {
+      const next = Math.max(fitScale * 0.5, Math.min(10, prev * factor));
+      const ratio = next / prev;
+      setPan((p) => ({
+        x: cx - (cx - p.x) * ratio,
+        y: cy - (cy - p.y) * ratio,
+      }));
+      return next;
     });
-  }, [zoom, constrainPan]);
+  }, [fitScale]);
 
-  // Zoom in
-  const handleZoomIn = useCallback(() => {
-    setZoom((prev) => Math.min(5, prev + 0.25));
-  }, []);
-
-  // Zoom out
-  const handleZoomOut = useCallback(() => {
-    setZoom((prev) => {
-      const newZoom = Math.max(0.5, prev - 0.25);
-      if (newZoom <= 1) {
-        setPan({ x: 0, y: 0 });
-      }
-      return newZoom;
-    });
-  }, []);
+  const handleZoomIn = useCallback(() => zoomToCenter(1.25), [zoomToCenter]);
+  const handleZoomOut = useCallback(() => zoomToCenter(1 / 1.25), [zoomToCenter]);
 
   const handleImageLoad = () => {
     setImageLoading(false);
@@ -238,6 +197,7 @@ export function ImagePreview({ image, onFullscreenClick }: ImagePreviewProps) {
   }
 
   const imageUrl = api.getImageUrl(image.filename);
+  const zoomPercent = Math.round(scale * 100);
 
   return (
     <div className="image-preview">
@@ -250,9 +210,11 @@ export function ImagePreview({ image, onFullscreenClick }: ImagePreviewProps) {
       <div
         ref={containerRef}
         className="image-preview-container"
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        style={{ cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+        style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
       >
         {imageLoading && (
           <div className="image-preview-loading">
@@ -271,39 +233,43 @@ export function ImagePreview({ image, onFullscreenClick }: ImagePreviewProps) {
             alt={image.filename}
             onLoad={handleImageLoad}
             onError={handleImageError}
-            onMouseDown={handleMouseDown}
-            onTouchStart={handleTouchStart}
             className={`image-preview-img ${imageLoading ? 'loading' : ''}`}
             style={{
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-              transformOrigin: 'top left',
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+              transformOrigin: '0 0',
               transition: isDragging ? 'none' : 'transform 0.1s ease-out',
             }}
             draggable={false}
           />
         )}
-        
-        {/* Zoom Controls */}
+
+        {/* Zoom Controls - stopPropagation on mousedown to prevent drag */}
         {!imageLoading && !imageError && (
-          <div className="image-preview-zoom-controls">
+          <div
+            className="image-preview-zoom-controls"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             <button
               className="zoom-button"
               onClick={handleZoomOut}
-              disabled={zoom <= 0.5}
+              disabled={scale <= fitScale * 0.5}
               title="Zoom Out"
             >
               −
             </button>
-            <span className="zoom-level">{Math.round(zoom * 100)}%</span>
+            <span className="zoom-level">{zoomPercent}%</span>
             <button
               className="zoom-button"
               onClick={handleZoomIn}
-              disabled={zoom >= 5}
+              disabled={scale >= 10}
               title="Zoom In"
             >
               +
             </button>
-            {zoom > 1 && (
+            {Math.abs(scale - fitScale) > 0.01 && (
               <button
                 className="zoom-reset-button"
                 onClick={handleReset}
