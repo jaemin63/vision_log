@@ -4,15 +4,14 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export const api = {
   /**
-   * Get list of images
+   * Get list of 2D images
    */
-  async getImages(): Promise<ImageMetadata[]> {
-    const response = await fetch(`${API_URL}/api/images`);
+  async getImages2d(): Promise<ImageMetadata[]> {
+    const response = await fetch(`${API_URL}/api/images/2d`);
     if (!response.ok) {
-      throw new Error(`Failed to fetch images: ${response.statusText}`);
+      throw new Error(`Failed to fetch 2D images: ${response.statusText}`);
     }
     const data = await response.json();
-    // Convert timestamp strings to Date objects
     return data.map((img: any) => ({
       ...img,
       timestamp: new Date(img.timestamp),
@@ -20,10 +19,32 @@ export const api = {
   },
 
   /**
+   * Get list of 3D images
+   */
+  async getImages3d(): Promise<ImageMetadata[]> {
+    const response = await fetch(`${API_URL}/api/images/3d`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch 3D images: ${response.statusText}`);
+    }
+    const data = await response.json();
+    return data.map((img: any) => ({
+      ...img,
+      timestamp: new Date(img.timestamp),
+    }));
+  },
+
+  /**
+   * Legacy: Get list of images (defaults to 3D)
+   */
+  async getImages(): Promise<ImageMetadata[]> {
+    return this.getImages3d();
+  },
+
+  /**
    * Get image URL
    */
-  getImageUrl(filename: string): string {
-    return `${API_URL}/api/images/${encodeURIComponent(filename)}`;
+  getImageUrl(filename: string, type: '2d' | '3d' = '3d'): string {
+    return `${API_URL}/api/images/${type}/${encodeURIComponent(filename)}`;
   },
 
   /**
@@ -82,6 +103,46 @@ export const api = {
     });
     if (!response.ok) {
       throw new Error(`Failed to update config: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  /**
+   * Test: Merge 3D images
+   * 3d_raw_data 폴더의 이미지를 합쳐서 3d_image에 저장
+   */
+  async mergeTestImages(): Promise<{ success: boolean; filename: string; message: string }> {
+    const response = await fetch(`${API_URL}/api/test/merge-images`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || `Failed to merge images: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  /**
+   * Get raw data folder status
+   */
+  async getRawDataStatus(): Promise<{ count: number; files: string[] }> {
+    const response = await fetch(`${API_URL}/api/test/raw-data-status`);
+    if (!response.ok) {
+      throw new Error(`Failed to get raw data status: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  /**
+   * Get viewer configuration
+   */
+  async getViewerConfig(): Promise<{ initialZoomPercent: number }> {
+    const response = await fetch(`${API_URL}/api/config/viewer`);
+    if (!response.ok) {
+      throw new Error(`Failed to get viewer config: ${response.statusText}`);
     }
     return response.json();
   },

@@ -4,7 +4,7 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: rgba(0, 0, 0, 0.8);
+  background-color: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -12,19 +12,31 @@
 }
 
 .config-editor-modal {
-  background-color: #2a2a2a;
-  border-radius: 8px;
+  background-color: #ffffff;
+  border-radius: 12px;
   width: 90%;
   max-width: 700px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  animation: popupScale 0.3s ease-in-out;
+}
+
+@keyframes popupScale {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .config-editor-header {
   padding: 1.5rem;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid #e0e0e0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -33,27 +45,30 @@
 .config-editor-header h2 {
   margin: 0;
   font-size: 1.5rem;
-  color: rgba(255, 255, 255, 0.87);
+  color: #333;
+  font-weight: 600;
 }
 
 .config-editor-close {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.7);
+  color: #666;
   font-size: 2rem;
   cursor: pointer;
   padding: 0;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
-  transition: background-color 0.2s ease;
+  border-radius: 50%;
+  transition: all 0.2s ease;
 }
 
 .config-editor-close:hover {
-  background-color: #444;
+  background-color: rgba(0, 120, 255, 0.1);
+  color: #0078ff;
+  transform: rotate(90deg);
 }
 
 .config-editor-content {
@@ -63,11 +78,11 @@
 }
 
 .config-editor-error {
-  background-color: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.5);
-  color: rgba(239, 68, 68, 0.9);
+  background-color: #fee2e2;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
   padding: 0.75rem;
-  border-radius: 4px;
+  border-radius: 8px;
   margin-bottom: 1rem;
 }
 
@@ -76,23 +91,25 @@
 }
 
 .config-section h3 {
-  color: rgba(255, 255, 255, 0.87);
+  color: #333;
   font-size: 1.2rem;
   margin-bottom: 1rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid #444;
+  border-bottom: 1px solid #e0e0e0;
+  font-weight: 600;
 }
 
 .config-subsection {
   margin-top: 1rem;
   padding-left: 1rem;
-  border-left: 2px solid #444;
+  border-left: 2px solid #0078ff;
 }
 
 .config-subsection h4 {
-  color: rgba(255, 255, 255, 0.7);
+  color: #555;
   font-size: 1rem;
   margin-bottom: 0.75rem;
+  font-weight: 500;
 }
 
 .config-field {
@@ -101,7 +118,7 @@
 
 .config-field label {
   display: block;
-  color: rgba(255, 255, 255, 0.7);
+  color: #555;
   font-size: 0.9rem;
   margin-bottom: 0.5rem;
   font-weight: 500;
@@ -112,19 +129,20 @@
 .config-field input[type='password'],
 .config-field select {
   width: 100%;
-  padding: 0.5rem;
-  background-color: #1a1a1a;
-  border: 1px solid #444;
-  border-radius: 4px;
-  color: rgba(255, 255, 255, 0.87);
+  padding: 0.75rem;
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  color: #333;
   font-size: 0.9rem;
-  transition: border-color 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .config-field input:focus,
 .config-field select:focus {
   outline: none;
-  border-color: #646cff;
+  border-color: #0078ff;
+  box-shadow: 0 0 8px rgba(0, 120, 255, 0.2);
 }
 
 .config-field input[type='checkbox'] {
@@ -140,7 +158,7 @@
 
 .config-editor-footer {
   padding: 1.5rem;
-  border-top: 1px solid #333;
+  border-top: 1px solid #e0e0e0;
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
@@ -149,29 +167,29 @@
 .config-editor-footer button {
   padding: 0.75rem 1.5rem;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 0.9rem;
-  font-weight: 500;
-  transition: background-color 0.2s ease;
+  font-weight: 600;
+  transition: all 0.2s ease;
 }
 
 .config-editor-footer button:not(.config-save-button) {
-  background-color: #444;
-  color: rgba(255, 255, 255, 0.87);
+  background-color: #e0e0e0;
+  color: #333;
 }
 
 .config-editor-footer button:not(.config-save-button):hover {
-  background-color: #555;
+  background-color: #d0d0d0;
 }
 
 .config-save-button {
-  background-color: #646cff;
+  background-color: #0078ff;
   color: white;
 }
 
 .config-save-button:hover:not(:disabled) {
-  background-color: #535bf2;
+  background-color: #0056cc;
 }
 
 .config-editor-footer button:disabled {

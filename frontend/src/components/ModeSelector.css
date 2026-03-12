@@ -1,7 +1,6 @@
 .mode-selector {
   padding: 1rem;
-  border-top: 1px solid #333;
-  background-color: #2a2a2a;
+  background-color: #f5f5f5;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -10,7 +9,7 @@
 .mode-selector-label {
   font-size: 0.9rem;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.7);
+  color: #555;
 }
 
 .mode-selector-buttons {
@@ -20,31 +19,32 @@
 
 .mode-button {
   flex: 1;
-  padding: 0.5rem 1rem;
-  background-color: #3a3a3a;
-  color: rgba(255, 255, 255, 0.87);
-  border: 1px solid #444;
-  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  background-color: #ffffff;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 0.9rem;
-  font-weight: 500;
+  font-weight: 600;
   transition: all 0.2s ease;
 }
 
 .mode-button:hover:not(:disabled) {
-  background-color: #444;
-  border-color: #555;
+  background-color: #e0e0e0;
+  color: #0078ff;
 }
 
 .mode-button.active {
-  background-color: #646cff;
-  border-color: #646cff;
+  background-color: #0078ff;
+  border-color: #0078ff;
   color: white;
+  box-shadow: 0 4px 8px rgba(0, 120, 255, 0.3);
 }
 
 .mode-button:disabled {
   cursor: not-allowed;
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
 .mode-status {
@@ -52,14 +52,14 @@
   align-items: center;
   gap: 0.5rem;
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: #666;
 }
 
 .status-indicator {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background-color: #666;
+  background-color: #999;
   transition: background-color 0.3s ease;
 }
 
@@ -80,9 +80,9 @@
   margin-top: 0.5rem;
   padding: 0.5rem;
   width: 100%;
-  background-color: #3a3a3a;
-  color: rgba(255, 255, 255, 0.87);
-  border: 1px solid #444;
+  background-color: #ffffff;
+  color: #333;
+  border: 1px solid #ddd;
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.85rem;
@@ -90,6 +90,6 @@
 }
 
 .config-button:hover {
-  background-color: #444;
-  border-color: #555;
+  background-color: #e0e0e0;
+  border-color: #bbb;
 }

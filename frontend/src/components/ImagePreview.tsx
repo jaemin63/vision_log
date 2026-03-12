@@ -5,10 +5,15 @@ import './ImagePreview.css';
 
 interface ImagePreviewProps {
   image: ImageMetadata | null;
-  onFullscreenClick?: () => void;
+  imageType: '2d' | '3d';
+  initialZoomPercent?: number;
 }
 
-export function ImagePreview({ image, onFullscreenClick }: ImagePreviewProps) {
+export function ImagePreview({
+  image,
+  imageType,
+  initialZoomPercent = 100,
+}: ImagePreviewProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const [scale, setScale] = useState(1);
@@ -57,10 +62,12 @@ export function ImagePreview({ image, onFullscreenClick }: ImagePreviewProps) {
     if (!imageLoading && imageRef.current && containerRef.current) {
       const fs = calculateFitScale();
       setFitScale(fs);
-      setScale(fs);
-      setPan(calculateCenteredPan(fs));
+      // Apply initial zoom percent setting
+      const initialScale = fs * (initialZoomPercent / 100);
+      setScale(initialScale);
+      setPan(calculateCenteredPan(initialScale));
     }
-  }, [imageLoading, calculateFitScale, calculateCenteredPan]);
+  }, [imageLoading, calculateFitScale, calculateCenteredPan, initialZoomPercent]);
 
   // Wheel zoom toward mouse cursor position
   useEffect(() => {
@@ -191,12 +198,25 @@ export function ImagePreview({ image, onFullscreenClick }: ImagePreviewProps) {
   if (!image) {
     return (
       <div className="image-preview-empty">
-        <p>Select an image to preview</p>
+        <svg
+          className="image-preview-empty-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <polyline points="21 15 16 10 5 21" />
+        </svg>
+        <p>Select an image from the menu</p>
       </div>
     );
   }
 
-  const imageUrl = api.getImageUrl(image.filename);
+  const imageUrl = api.getImageUrl(image.filename, imageType);
   const zoomPercent = Math.round(scale * 100);
 
   return (
@@ -276,15 +296,6 @@ export function ImagePreview({ image, onFullscreenClick }: ImagePreviewProps) {
                 title="Reset Zoom"
               >
                 Reset
-              </button>
-            )}
-            {onFullscreenClick && (
-              <button
-                className="zoom-fullscreen-button"
-                onClick={onFullscreenClick}
-                title="Open in fullscreen"
-              >
-                Fullscreen
               </button>
             )}
           </div>

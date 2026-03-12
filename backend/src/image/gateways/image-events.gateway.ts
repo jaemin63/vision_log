@@ -68,8 +68,41 @@ export class ImageEventsGateway
   }
 
   /**
-   * Listen for image events from EventEmitter
+   * Listen for 2D image events from EventEmitter
    * and broadcast to all connected WebSocket clients
+   */
+  @OnEvent('image.event.2d')
+  handleImage2dEvent(payload: { filename: string; timestamp: Date }) {
+    const eventData = {
+      type: 'image-event-2d',
+      filename: payload.filename,
+      timestamp: payload.timestamp,
+    };
+
+    // Broadcast to all connected clients
+    this.server.emit('image-event-2d', eventData);
+    console.log(`Broadcasted 2D image event: ${payload.filename}`);
+  }
+
+  /**
+   * Listen for 3D image events from EventEmitter
+   * and broadcast to all connected WebSocket clients
+   */
+  @OnEvent('image.event.3d')
+  handleImage3dEvent(payload: { filename: string; timestamp: Date }) {
+    const eventData = {
+      type: 'image-event-3d',
+      filename: payload.filename,
+      timestamp: payload.timestamp,
+    };
+
+    // Broadcast to all connected clients
+    this.server.emit('image-event-3d', eventData);
+    console.log(`Broadcasted 3D image event: ${payload.filename}`);
+  }
+
+  /**
+   * Legacy: Listen for generic image events (backward compatibility)
    */
   @OnEvent('image.event')
   handleImageEvent(payload: { filename: string; timestamp: Date }) {

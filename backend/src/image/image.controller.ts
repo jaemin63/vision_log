@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ImageService } from './image.service';
+import { ImageMergeService } from './services/image-merge.service';
+import { ImageCopyService } from './services/image-copy.service';
 import { ImageMetadataDto } from './dto/image-metadata.dto';
 import { ImageEventService } from './interfaces/image-event-service.interface';
 import { PollingConfigService, PollingConfig } from '../config/polling.config';
@@ -22,6 +24,8 @@ import { existsSync } from 'fs';
 export class ImageController {
   constructor(
     private readonly imageService: ImageService,
+    private readonly imageMergeService: ImageMergeService,
+    private readonly imageCopyService: ImageCopyService,
     @Inject('ImageEventService')
     private readonly imageEventService: ImageEventService,
     private readonly configService: PollingConfigService,
@@ -48,14 +52,97 @@ export class ImageController {
     }
   }
 
+  /**
+   * Get 2D image list
+   * GET /api/images/2d
+   */
+  @Get('api/images/2d')
+  async getImages2d(): Promise<ImageMetadataDto[]> {
+    try {
+      return await this.imageService.getImageList2d();
+    } catch (error) {
+      throw new HttpException(
+        {
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          error: 'Failed to retrieve 2D image list',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Get 3D image list
+   * GET /api/images/3d
+   */
+  @Get('api/images/3d')
+  async getImages3d(): Promise<ImageMetadataDto[]> {
+    try {
+      return await this.imageService.getImageList3d();
+    } catch (error) {
+      throw new HttpException(
+        {
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          error: 'Failed to retrieve 3D image list',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Serve 2D image file
+   * GET /api/images/2d/:filename
+   */
+  @Get('api/images/2d/:filename')
+  async getImage2d(
+    @Param('filename') filename: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    await this.serveImage(filename, '2d', res);
+  }
+
+  /**
+   * Serve 3D image file
+   * GET /api/images/3d/:filename
+   */
+  @Get('api/images/3d/:filename')
+  async getImage3d(
+    @Param('filename') filename: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    await this.serveImage(filename, '3d', res);
+  }
+
+  /**
+   * Legacy: Serve image file (defaults to 3D)
+   * GET /api/images/:filename
+   */
   @Get('api/images/:filename')
   async getImage(
     @Param('filename') filename: string,
     @Res() res: Response,
   ): Promise<void> {
+    await this.serveImage(filename, '3d', res);
+  }
+
+  /**
+   * Internal method to serve image file
+   */
+  private async serveImage(
+    filename: string,
+    type: '2d' | '3d',
+    res: Response,
+  ): Promise<void> {
     try {
       // Security: Validate filename
-      if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      if (
+        filename.includes('..') ||
+        filename.includes('/') ||
+        filename.includes('\\')
+      ) {
         throw new HttpException(
           {
             status: HttpStatus.BAD_REQUEST,
@@ -78,7 +165,7 @@ export class ImageController {
       }
 
       // Check if file exists
-      const filePath = this.imageService.getImagePath(filename);
+      const filePath = this.imageService.getImagePath(filename, type);
       if (!existsSync(filePath)) {
         throw new HttpException(
           {
@@ -245,5 +332,117 @@ export class ImageController {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  /**
+   * Test endpoint: Merge 3D images and trigger event
+   * POST /api/test/merge-images
+   * 3d_raw_data 폴더의 이미지를 합쳐서 3d_image에 저장하고 이벤트 발생
+   */
+  @Post('api/test/merge-images')
+  async mergeImages() {
+    try {
+      const result = await this.imageMergeService.mergeAndSaveImages();
+
+      if (!result.success) {
+        throw new HttpException(
+          {
+            status: HttpStatus.BAD_REQUEST,
+            error: 'Failed to merge images',
+            message: result.message,
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        {
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          error: 'Failed to merge images',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Get 3d_raw_data folder status
+   * GET /api/test/raw-data-status
+   */
+  @Get('api/test/raw-data-status')
+  async getRawDataStatus() {
+    return this.imageMergeService.getRawDataStatus();
+  }
+
+  /**
+   * Test endpoint: Copy 2D image
+   * POST /api/test/copy-2d-image
+   * 2d_raw_data 폴더의 이미지를 2d_image에 복사하고 이벤트 발생
+   */
+  @Post('api/test/copy-2d-image')
+  async copy2dImage() {
+    try {
+      const result = await this.imageCopyService.copyLatest2dImage();
+
+      if (!result.success) {
+        throw new HttpException(
+          {
+            status: HttpStatus.BAD_REQUEST,
+            error: 'Failed to copy 2D image',
+            message: result.message,
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        {
+          status: HttpStatus.INTERNAL_SERVER_ERROR,
+          error: 'Failed to copy 2D image',
+          message: error instanceof Error ? error.message : 'Unknown error',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Get 2d_raw_data folder status
+   * GET /api/test/raw-data-status-2d
+   */
+  @Get('api/test/raw-data-status-2d')
+  async getRawDataStatus2d() {
+    return this.imageCopyService.getRawDataStatus();
+  }
+
+  /**
+   * Get viewer configuration
+   * GET /api/config/viewer
+   */
+  @Get('api/config/viewer')
+  getViewerConfig() {
+    return this.configService.getViewerConfig();
+  }
+
+  /**
+   * Update viewer configuration
+   * PUT /api/config/viewer
+   */
+  @Put('api/config/viewer')
+  updateViewerConfig(@Body() body: { initialZoomPercent?: number }) {
+    return this.configService.updateConfig({
+      viewer: body,
+    }).viewer;
   }
 }

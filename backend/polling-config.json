@@ -1,0 +1,19 @@
+{
+  "modbus": {
+    "enabled": true,
+    "host": "10.34.1.83",
+    "port": 502,
+    "unitId": 1,
+    "registerType": "holding",
+    "register": 0,
+    "pollIntervalMs": 1000,
+    "triggers": [
+      { "type": "transition", "from": 0, "to": 1 },
+      { "type": "transition", "from": 1, "to": 2 },
+      { "type": "transition", "from": 2, "to": 3 }
+    ]
+  },
+  "viewer": {
+    "initialZoomPercent": 150
+  }
+}

@@ -5,7 +5,9 @@ import { ImageMetadataDto } from './dto/image-metadata.dto';
 
 @Injectable()
 export class ImageService {
-  private readonly imageDirectory: string;
+  private readonly baseDirectory: string;
+  private readonly imageDirectory2d: string;
+  private readonly imageDirectory3d: string;
   private readonly allowedExtensions = [
     '.jpg',
     '.jpeg',
@@ -17,8 +19,10 @@ export class ImageService {
 
   constructor() {
     // Get image directory from environment variable or use default
-    this.imageDirectory =
+    this.baseDirectory =
       process.env.IMAGE_DIRECTORY || join(process.cwd(), 'images');
+    this.imageDirectory2d = join(this.baseDirectory, '2d_image');
+    this.imageDirectory3d = join(this.baseDirectory, '3d_image');
   }
 
   /**
@@ -30,18 +34,35 @@ export class ImageService {
   }
 
   /**
+   * Ensure directory exists
+   */
+  private async ensureDirectory(dir: string): Promise<void> {
+    try {
+      await fs.access(dir);
+    } catch {
+      await fs.mkdir(dir, { recursive: true });
+      console.log(`Created directory: ${dir}`);
+    }
+  }
+
+  /**
    * Scan directory and return list of image files with metadata
    */
-  async getImageList(): Promise<ImageMetadataDto[]> {
+  private async getImageListFromDir(
+    directory: string,
+  ): Promise<ImageMetadataDto[]> {
     try {
+      // Ensure directory exists
+      await this.ensureDirectory(directory);
+
       // Read directory contents
-      const files = await fs.readdir(this.imageDirectory);
+      const files = await fs.readdir(directory);
 
       // Filter image files and get their stats
       const imagePromises = files
         .filter((file) => this.isImageFile(file))
         .map(async (filename): Promise<ImageMetadataDto> => {
-          const filePath = join(this.imageDirectory, filename);
+          const filePath = join(directory, filename);
           const stats = await fs.stat(filePath);
 
           return {
@@ -60,7 +81,7 @@ export class ImageService {
       // If directory doesn't exist or can't be read, return empty array
       if (error?.code === 'ENOENT') {
         console.warn(
-          `Image directory not found: ${this.imageDirectory}. Returning empty list.`,
+          `Image directory not found: ${directory}. Returning empty list.`,
         );
         return [];
       }
@@ -69,22 +90,51 @@ export class ImageService {
   }
 
   /**
+   * Get 2D image list
+   */
+  async getImageList2d(): Promise<ImageMetadataDto[]> {
+    return this.getImageListFromDir(this.imageDirectory2d);
+  }
+
+  /**
+   * Get 3D image list
+   */
+  async getImageList3d(): Promise<ImageMetadataDto[]> {
+    return this.getImageListFromDir(this.imageDirectory3d);
+  }
+
+  /**
+   * Legacy: Get image list (defaults to 3D for backward compatibility)
+   */
+  async getImageList(): Promise<ImageMetadataDto[]> {
+    return this.getImageList3d();
+  }
+
+  /**
    * Get the full path to an image file
    */
-  getImagePath(filename: string): string {
+  getImagePath(filename: string, type: '2d' | '3d' = '3d'): string {
     // Security: Validate filename doesn't contain path traversal
-    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+    if (
+      filename.includes('..') ||
+      filename.includes('/') ||
+      filename.includes('\\')
+    ) {
       throw new Error('Invalid filename');
     }
-    return join(this.imageDirectory, filename);
+    const dir = type === '2d' ? this.imageDirectory2d : this.imageDirectory3d;
+    return join(dir, filename);
   }
 
   /**
    * Check if image file exists
    */
-  async imageExists(filename: string): Promise<boolean> {
+  async imageExists(
+    filename: string,
+    type: '2d' | '3d' = '3d',
+  ): Promise<boolean> {
     try {
-      const filePath = this.getImagePath(filename);
+      const filePath = this.getImagePath(filename, type);
       await fs.access(filePath);
       return true;
     } catch {

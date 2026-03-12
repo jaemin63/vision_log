@@ -19,13 +19,16 @@
     "@nestjs/platform-express": "^11.1.12",
     "@nestjs/platform-socket.io": "^11.1.12",
     "@nestjs/websockets": "^11.1.12",
+    "modbus-serial": "^8.0.23",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
+    "sharp": "^0.34.5",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.16",
     "@types/node": "^25.2.0",
+    "@types/sharp": "^0.31.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }

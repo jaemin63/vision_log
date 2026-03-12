@@ -4,6 +4,7 @@ import { io, Socket } from 'socket.io-client';
 export interface ImageEvent {
   filename: string;
   timestamp: Date;
+  type: '2d' | '3d';
 }
 
 type ImageEventHandler = (event: ImageEvent) => void;
@@ -22,10 +23,11 @@ export function useImageEvents(onEvent: ImageEventHandler) {
   }, [onEvent]);
 
   // Mock event emitter for testing
-  const emitMockEvent = useCallback((filename: string) => {
+  const emitMockEvent = useCallback((filename: string, type: '2d' | '3d' = '3d') => {
     const event: ImageEvent = {
       filename,
       timestamp: new Date(),
+      type,
     };
     handlerRef.current(event);
   }, []);
@@ -50,14 +52,34 @@ export function useImageEvents(onEvent: ImageEventHandler) {
       console.log('Socket.IO connection confirmed:', data.message);
     });
     
-    socket.on('image-event', (data: { type: string; filename: string; timestamp: string }) => {
-      console.log('Image event received:', data);
+    socket.on('image-event-2d', (data: { type: string; filename: string; timestamp: string }) => {
+      console.log('2D Image event received:', data);
       handlerRef.current({
         filename: data.filename,
         timestamp: new Date(data.timestamp),
+        type: '2d',
       });
     });
-    
+
+    socket.on('image-event-3d', (data: { type: string; filename: string; timestamp: string }) => {
+      console.log('3D Image event received:', data);
+      handlerRef.current({
+        filename: data.filename,
+        timestamp: new Date(data.timestamp),
+        type: '3d',
+      });
+    });
+
+    // Legacy: handle generic image-event (default to 3D)
+    socket.on('image-event', (data: { type: string; filename: string; timestamp: string }) => {
+      console.log('Image event received (legacy):', data);
+      handlerRef.current({
+        filename: data.filename,
+        timestamp: new Date(data.timestamp),
+        type: '3d',
+      });
+    });
+
     socket.on('disconnect', (reason: string) => {
       console.log('Socket.IO disconnected:', reason);
     });

@@ -1,39 +1,51 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
+export type ModbusRegisterType = 'coil' | 'discrete' | 'input' | 'holding';
+
+export interface ViewerConfig {
+  initialZoomPercent: number;
+}
+
+/**
+ * Trigger condition types:
+ * - transition: Triggers when value changes from 'from' to 'to'
+ * - threshold: Triggers when value meets the condition (operator + value)
+ * - change: Triggers on any value change
+ */
+export type TriggerType = 'transition' | 'threshold' | 'change';
+export type ThresholdOperator = '==' | '!=' | '>' | '<' | '>=' | '<=';
+
+export interface TransitionTrigger {
+  type: 'transition';
+  from: number;
+  to: number;
+}
+
+export interface ThresholdTrigger {
+  type: 'threshold';
+  operator: ThresholdOperator;
+  value: number;
+}
+
+export interface ChangeTrigger {
+  type: 'change';
+}
+
+export type TriggerCondition = TransitionTrigger | ThresholdTrigger | ChangeTrigger;
+
 export interface PollingConfig {
   modbus: {
     enabled: boolean;
     host: string;
     port: number;
+    unitId: number;
+    registerType: ModbusRegisterType;
     register: number;
-    conditionValue: number;
     pollIntervalMs: number;
+    triggers: TriggerCondition[];
   };
-  robot: {
-    accessMethod: 'ftp' | 'smb' | 'http' | 'local';
-    imagePath: string;
-    // FTP settings
-    ftp?: {
-      host: string;
-      port: number;
-      username: string;
-      password: string;
-      path: string;
-    };
-    // SMB/Network Share settings
-    smb?: {
-      share: string; // e.g., \\192.168.1.100\images
-      username: string;
-      password: string;
-      domain?: string;
-    };
-    // HTTP settings
-    http?: {
-      baseUrl: string;
-      apiKey?: string;
-    };
-  };
+  viewer: ViewerConfig;
 }
 
 const CONFIG_FILE_PATH = join(process.cwd(), 'polling-config.json');
@@ -43,29 +55,14 @@ const DEFAULT_CONFIG: PollingConfig = {
     enabled: false,
     host: '192.168.1.100',
     port: 502,
-    register: 1001,
-    conditionValue: 1,
+    unitId: 1,
+    registerType: 'holding',
+    register: 0,
     pollIntervalMs: 1000,
+    triggers: [{ type: 'transition', from: 0, to: 1 }],
   },
-  robot: {
-    accessMethod: 'smb',
-    imagePath: '\\192.168.1.100\\images',
-    smb: {
-      share: '\\192.168.1.100\\images',
-      username: '',
-      password: '',
-      domain: 'WORKGROUP',
-    },
-    ftp: {
-      host: '192.168.1.100',
-      port: 21,
-      username: '',
-      password: '',
-      path: '/images',
-    },
-    http: {
-      baseUrl: 'http://192.168.1.100/api',
-    },
+  viewer: {
+    initialZoomPercent: 100,
   },
 };
 
@@ -120,23 +117,14 @@ export class PollingConfigService {
   /**
    * Update configuration
    */
-  updateConfig(updates: Partial<PollingConfig>): PollingConfig {
+  updateConfig(updates: {
+    modbus?: Partial<PollingConfig['modbus']>;
+    viewer?: Partial<ViewerConfig>;
+  }): PollingConfig {
     const updated = {
       ...this.config,
       modbus: { ...this.config.modbus, ...updates.modbus },
-      robot: {
-        ...this.config.robot,
-        ...updates.robot,
-        ftp: updates.robot?.ftp
-          ? { ...this.config.robot.ftp, ...updates.robot.ftp }
-          : this.config.robot.ftp,
-        smb: updates.robot?.smb
-          ? { ...this.config.robot.smb, ...updates.robot.smb }
-          : this.config.robot.smb,
-        http: updates.robot?.http
-          ? { ...this.config.robot.http, ...updates.robot.http }
-          : this.config.robot.http,
-      },
+      viewer: { ...this.config.viewer, ...updates.viewer },
     };
     this.saveConfig(updated);
     return this.getConfig();
@@ -146,28 +134,28 @@ export class PollingConfigService {
    * Merge loaded config with defaults to ensure all fields exist
    */
   private mergeWithDefault(loaded: any): PollingConfig {
+    const modbus = {
+      ...DEFAULT_CONFIG.modbus,
+      ...loaded.modbus,
+    };
+    // Use loaded triggers if present, otherwise use default
+    if (loaded.modbus?.triggers && Array.isArray(loaded.modbus.triggers)) {
+      modbus.triggers = loaded.modbus.triggers;
+    }
     return {
-      modbus: {
-        ...DEFAULT_CONFIG.modbus,
-        ...loaded.modbus,
-      },
-      robot: {
-        ...DEFAULT_CONFIG.robot,
-        ...loaded.robot,
-        ftp: {
-          ...DEFAULT_CONFIG.robot.ftp,
-          ...loaded.robot?.ftp,
-        },
-        smb: {
-          ...DEFAULT_CONFIG.robot.smb,
-          ...loaded.robot?.smb,
-        },
-        http: {
-          ...DEFAULT_CONFIG.robot.http,
-          ...loaded.robot?.http,
-        },
+      modbus,
+      viewer: {
+        ...DEFAULT_CONFIG.viewer,
+        ...loaded.viewer,
       },
     };
+  }
+
+  /**
+   * Get viewer configuration only
+   */
+  getViewerConfig(): ViewerConfig {
+    return { ...this.config.viewer };
   }
 
   /**

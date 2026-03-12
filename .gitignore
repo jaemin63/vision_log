@@ -33,7 +33,6 @@ logs/
 # Backend specific
 backend/dist/
 backend/node_modules/
-backend/polling-config.json
 
 # Frontend specific
 frontend/dist/
