@@ -6,6 +6,7 @@ import {
   Put,
   Body,
   Res,
+  Query,
   HttpException,
   HttpStatus,
   Inject,
@@ -201,6 +202,58 @@ export class ImageController {
   }
 
   /**
+   * Get latest raw image set (3 IM* files: color, depth, edge)
+   * GET /api/images/3d-raw/latest
+   */
+  @Get('api/images/3d-raw/latest')
+  async getLatestRawSet() {
+    return this.imageMergeService.getLatestRawSet();
+  }
+
+  /**
+   * Serve raw image file from 3d_raw_data as PNG
+   * GET /api/images/3d-raw/:filename?role=color|depth|edge
+   * role 파라미터로 sharp 처리 방식 결정. 없으면 파일 직접 서빙.
+   */
+  @Get('api/images/3d-raw/:filename')
+  async getRawImage(
+    @Param('filename') filename: string,
+    @Query('role') role: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    try {
+      if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+        throw new HttpException({ status: HttpStatus.BAD_REQUEST, error: 'Invalid filename' }, HttpStatus.BAD_REQUEST);
+      }
+
+      const filePath = this.imageMergeService.getRawFilePath(filename);
+      if (!existsSync(filePath)) {
+        throw new HttpException({ status: HttpStatus.NOT_FOUND, error: 'File not found' }, HttpStatus.NOT_FOUND);
+      }
+
+      // color / depth / edge: sharp로 변환 후 PNG 서빙
+      if (role === 'color' || role === 'depth' || role === 'edge') {
+        const pngBuffer = await this.imageMergeService.convertRawToPng(filename, role);
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.end(pngBuffer);
+        return;
+      }
+
+      // role 없으면 파일 직접 서빙
+      const mimeType = this.imageService.isImageFile(filename)
+        ? this.imageService.getMimeType(filename)
+        : 'application/octet-stream';
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Cache-Control', 'no-cache');
+      createReadStream(filePath).pipe(res);
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException({ status: HttpStatus.INTERNAL_SERVER_ERROR, error: 'Failed to serve raw image' }, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  /**
    * Get event service status
    * GET /api/events/status
    */
@@ -329,6 +382,30 @@ export class ImageController {
           error: 'Failed to trigger event',
           message: error instanceof Error ? error.message : 'Unknown error',
         },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Demo endpoint: demo_raw 폴더의 고정 파일로 합성 (파일 삭제 없음)
+   * POST /api/demo/merge
+   */
+  @Post('api/demo/merge')
+  async mergeDemoImages() {
+    try {
+      const result = await this.imageMergeService.mergeDemoImages();
+      if (!result.success) {
+        throw new HttpException(
+          { status: HttpStatus.BAD_REQUEST, error: result.message },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      return result;
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        { status: HttpStatus.INTERNAL_SERVER_ERROR, error: 'Failed to merge demo images' },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }

@@ -1,11 +1,11 @@
 {
   "modbus": {
     "enabled": true,
-    "host": "10.34.1.83",
+    "host": "192.168.0.54",
     "port": 502,
     "unitId": 1,
     "registerType": "holding",
-    "register": 0,
+    "register": 99,
     "pollIntervalMs": 1000,
     "triggers": [
       { "type": "transition", "from": 0, "to": 1 },

@@ -14,8 +14,9 @@ export function ImagePreview({
   imageType,
   initialZoomPercent = 100,
 }: ImagePreviewProps) {
-  const [imageError, setImageError] = useState(false);
-  const [imageLoading, setImageLoading] = useState(true);
+  // 파일명 기반으로 로드/에러 추적 → useEffect 타이밍 race condition 방지
+  const [loadedFilename, setLoadedFilename] = useState<string | null>(null);
+  const [errorFilename, setErrorFilename] = useState<string | null>(null);
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [fitScale, setFitScale] = useState(1);
@@ -23,6 +24,10 @@ export function ImagePreview({
   const lastPointerRef = useRef({ x: 0, y: 0 });
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // 렌더 타임에 동기적으로 계산 (캐시된 이미지의 onLoad 타이밍 문제 없음)
+  const imageLoading = !!image && image.filename !== loadedFilename && image.filename !== errorFilename;
+  const imageError = !!image && image.filename === errorFilename;
 
   // Calculate the scale that fits the image within the container
   const calculateFitScale = useCallback(() => {
@@ -46,16 +51,14 @@ export function ImagePreview({
     };
   }, []);
 
-  // Reset state when image changes
+  // 이미지가 바뀌면 zoom/pan 초기화
   useEffect(() => {
     if (image) {
-      setImageError(false);
-      setImageLoading(true);
       setScale(1);
       setPan({ x: 0, y: 0 });
       setFitScale(1);
     }
-  }, [image]);
+  }, [image?.filename]);
 
   // Fit and center when image finishes loading
   useEffect(() => {
@@ -175,13 +178,11 @@ export function ImagePreview({
   const handleZoomOut = useCallback(() => zoomToCenter(1 / 1.25), [zoomToCenter]);
 
   const handleImageLoad = () => {
-    setImageLoading(false);
-    setImageError(false);
+    if (image) setLoadedFilename(image.filename);
   };
 
   const handleImageError = () => {
-    setImageLoading(false);
-    setImageError(true);
+    if (image) setErrorFilename(image.filename);
   };
 
   const formatTimestamp = (timestamp: Date): string => {

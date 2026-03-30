@@ -108,6 +108,21 @@ export const api = {
   },
 
   /**
+   * Demo: demo_raw 폴더의 고정 파일로 합성 (파일 삭제 없음)
+   */
+  async demoMerge(): Promise<{ success: boolean; filename: string; message: string }> {
+    const response = await fetch(`${API_URL}/api/demo/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || `Failed to demo merge: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  /**
    * Test: Merge 3D images
    * 3d_raw_data 폴더의 이미지를 합쳐서 3d_image에 저장
    */
@@ -145,5 +160,37 @@ export const api = {
       throw new Error(`Failed to get viewer config: ${response.statusText}`);
     }
     return response.json();
+  },
+
+  /**
+   * Get latest raw image set (color, depth, edge filenames)
+   */
+  async getLatestRawSet(): Promise<{
+    color: string | null;
+    depth: string | null;
+    edge: string | null;
+    rawDataDir: string;
+  }> {
+    const response = await fetch(`${API_URL}/api/images/3d-raw/latest`);
+    if (!response.ok) {
+      throw new Error(`Failed to get latest raw set: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  /**
+   * Get URL for a raw image file (role 지정 시 sharp로 PNG 변환)
+   */
+  getRawImageUrl(filename: string, role?: 'color' | 'depth' | 'edge'): string {
+    const base = `${API_URL}/api/images/3d-raw/${encodeURIComponent(filename)}`;
+    return role ? `${base}?role=${role}` : base;
+  },
+
+  /**
+   * Get latest merged 3D image filename
+   */
+  async getLatestMergedImage(): Promise<ImageMetadata | null> {
+    const images = await this.getImages3d();
+    return images.length > 0 ? images[0] : null;
   },
 };

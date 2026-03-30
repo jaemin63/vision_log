@@ -1,0 +1,428 @@
+/* ─── Exhibition Viewer ─────────────────────────────────────────────────────── */
+
+.exhibition-viewer {
+  position: fixed;
+  inset: 0;
+  background: #0a0a0f;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #e8e8e8;
+  overflow: hidden;
+}
+
+/* ─── Header ─── */
+
+.ex-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.ex-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #c8d8f8;
+  flex: 1;
+}
+
+.ex-badges {
+  display: flex;
+  gap: 8px;
+}
+
+.ex-badge {
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge-cycle {
+  background: rgba(99, 179, 255, 0.15);
+  border: 1px solid rgba(99, 179, 255, 0.35);
+  color: #90c8ff;
+}
+
+.badge-time {
+  background: rgba(120, 220, 140, 0.15);
+  border: 1px solid rgba(120, 220, 140, 0.35);
+  color: #90d8a0;
+}
+
+.badge-timestamp {
+  background: rgba(180, 160, 255, 0.12);
+  border: 1px solid rgba(180, 160, 255, 0.28);
+  color: #c0aaff;
+  font-family: 'Consolas', 'Courier New', monospace;
+  letter-spacing: 0.04em;
+}
+
+.ex-exit-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #aaa;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.ex-exit-btn:hover {
+  background: rgba(255, 80, 80, 0.2);
+  color: #ff8080;
+}
+
+/* ─── Stage ─── */
+
+.ex-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  min-height: 0;
+}
+
+/* ─── Loading / Error ─── */
+
+.ex-loading,
+.ex-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  color: #888;
+  font-size: 16px;
+}
+
+.ex-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #5588ff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.ex-error-icon {
+  font-size: 36px;
+  color: #f0a040;
+}
+
+.ex-retry-btn {
+  padding: 8px 20px;
+  background: rgba(99, 149, 255, 0.2);
+  border: 1px solid rgba(99, 149, 255, 0.4);
+  color: #99bbff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+
+.ex-retry-btn:hover {
+  background: rgba(99, 149, 255, 0.35);
+}
+
+/* ─── Three-up layout ─── */
+
+.ex-three-up {
+  display: flex;
+  gap: 20px;
+  width: 100%;
+  height: 100%;
+  align-items: stretch;
+}
+
+.ex-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Fade in on three-up */
+@keyframes cardEnter {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ex-three-up:not(.is-merging) .ex-card {
+  animation: cardEnter 1.0s ease both;
+}
+
+.ex-three-up:not(.is-merging) .card-depth { animation-delay: 0.05s; }
+.ex-three-up:not(.is-merging) .card-edge  { animation-delay: 0.10s; }
+
+/* ── Merging animation (2단계 순차) ──
+ * 1단계 (0~52%):  Edge(좌) → 중앙으로 슬라이드 → 멈춤 → 페이드아웃
+ *                 동시에 depth 카드 위 edge 레이어 fade-in
+ * 2단계 (52~100%): Color(우) → 중앙으로 슬라이드 → 멈춤 → 페이드아웃
+ *                 동시에 depth 카드 위 color 레이어 fade-in
+ * 전체 CSS 애니메이션 시간: 9s
+ */
+
+.ex-three-up.is-merging {
+  overflow: visible;
+}
+
+/* ── 1단계: Edge 카드 ──
+ * 0~28%:  우측으로 슬라이드 (gap 포함 정확한 거리)
+ * 28~46%: 중앙에서 멈춤
+ * 46~56%: 페이드아웃
+ */
+@keyframes mergeEdgeOut {
+  0%   { transform: translateX(0);                        opacity: 1; }
+  28%  { transform: translateX(calc(100% + 20px));        opacity: 1; }
+  46%  { transform: translateX(calc(100% + 20px));        opacity: 1; }
+  56%  { transform: translateX(calc(100% + 20px));        opacity: 0; }
+  100% { transform: translateX(calc(100% + 20px));        opacity: 0; }
+}
+
+/* edge 레이어: 카드 이동과 동기화 — 왼쪽부터 오른쪽으로 clip-path sweep
+ * 카드가 움직이는 0~28% 동안 레이어가 좌→우로 펼쳐짐 */
+@keyframes layerEdgeFadeIn {
+  0%   { opacity: 0.85; clip-path: inset(0 100% 0 0); }
+  28%  { opacity: 0.85; clip-path: inset(0 0%   0 0); }
+  100% { opacity: 0.85; clip-path: inset(0 0%   0 0); }
+}
+
+/* ── 2단계: Color 카드 ──
+ * 0~52%:  대기
+ * 52~80%: 좌측으로 슬라이드
+ * 80~92%: 중앙에서 멈춤
+ * 92~100%: 페이드아웃
+ */
+@keyframes mergeColorOut {
+  0%   { transform: translateX(0);                        opacity: 1; }
+  52%  { transform: translateX(0);                        opacity: 1; }
+  80%  { transform: translateX(calc(-100% - 20px));       opacity: 1; }
+  92%  { transform: translateX(calc(-100% - 20px));       opacity: 1; }
+  100% { transform: translateX(calc(-100% - 20px));       opacity: 0; }
+}
+
+/* color 레이어: 카드 이동과 동기화 — 오른쪽부터 왼쪽으로 clip-path sweep
+ * 카드가 움직이는 52~80% 동안 레이어가 우→좌로 펼쳐짐 */
+@keyframes layerColorFadeIn {
+  0%   { opacity: 0;    clip-path: inset(0 0 0 100%); }
+  52%  { opacity: 0;    clip-path: inset(0 0 0 100%); }
+  53%  { opacity: 0.75; clip-path: inset(0 0 0 100%); }
+  80%  { opacity: 0.75; clip-path: inset(0 0 0 0%);   }
+  100% { opacity: 0.75; clip-path: inset(0 0 0 0%);   }
+}
+
+/* Depth 카드: 전체 시간에 걸쳐 살짝 확대 */
+@keyframes mergeDepth {
+  from { transform: scale(1); }
+  to   { transform: scale(1.04); }
+}
+
+.ex-three-up.is-merging .card-edge {
+  animation: mergeEdgeOut 9s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  position: relative;
+  z-index: 3;
+  mix-blend-mode: screen;
+}
+
+.ex-three-up.is-merging .card-depth {
+  animation: mergeDepth 9s ease forwards;
+  position: relative;
+  z-index: 2;
+}
+
+.ex-three-up.is-merging .card-color {
+  animation: mergeColorOut 9s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  position: relative;
+  z-index: 4;
+  mix-blend-mode: screen;
+}
+
+/* 슬라이드 중인 카드의 박스 배경/테두리 제거 → 컨텐츠만 보이도록 */
+.ex-three-up.is-merging .card-edge .ex-card-img-wrap,
+.ex-three-up.is-merging .card-color .ex-card-img-wrap {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.ex-three-up.is-merging .layer-edge {
+  animation: layerEdgeFadeIn 9s ease forwards;
+}
+
+.ex-three-up.is-merging .layer-color {
+  animation: layerColorFadeIn 9s ease forwards;
+}
+
+/* ─── Card image wrap ─── */
+
+.ex-card-img-wrap {
+  flex: 1;
+  background: #111118;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  transition: border-color 0.4s;
+}
+
+.ex-three-up.is-merging .card-depth .ex-card-img-wrap {
+  border-color: rgba(99, 179, 255, 0.5);
+  box-shadow: 0 0 40px rgba(99, 179, 255, 0.25);
+  transition: border-color 5.0s ease, box-shadow 5.0s ease;
+}
+
+.ex-raw-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* ─── Composite layer stack (depth card center) ─── */
+
+/* 중앙 depth 카드의 이미지 래퍼를 position 컨테이너로 */
+.ex-composite {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* 모든 레이어 이미지를 절대 위치로 스택 */
+.ex-composite .ex-raw-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Edge 레이어: 기본 숨김, multiply blend (깊이 윤곽 강조) */
+.layer-edge {
+  opacity: 0;
+  mix-blend-mode: multiply;
+}
+
+/* Color 레이어: 기본 숨김, screen blend (색상 오버레이) */
+.layer-color {
+  opacity: 0;
+  mix-blend-mode: screen;
+}
+
+/* ─── Card label ─── */
+
+.ex-card-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  padding-bottom: 4px;
+  transition: opacity 0.4s;
+}
+
+/* 합치기 중에는 모든 라벨 숨김 */
+.ex-three-up.is-merging .ex-card-label {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.label-en {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c0ccdd;
+  letter-spacing: 0.03em;
+}
+
+.label-ko {
+  font-size: 11px;
+  color: #6a7a8a;
+}
+
+/* ─── Merged result ─── */
+
+.ex-merged {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  height: 100%;
+  animation: mergedEnter 1.4s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+@keyframes mergedEnter {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.ex-merged-img {
+  flex: 1;
+  max-width: 100%;
+  max-height: calc(100% - 50px);
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid rgba(99, 179, 255, 0.2);
+  box-shadow: 0 4px 40px rgba(80, 140, 255, 0.15);
+}
+
+.ex-no-merged {
+  color: #555;
+  font-size: 16px;
+}
+
+.ex-merged-label {
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+  flex-shrink: 0;
+}
+
+.ex-merged-label .label-en {
+  font-size: 16px;
+  color: #b0c8e8;
+}
+
+.ex-merged-label .label-ko {
+  font-size: 13px;
+}
+
+/* ─── Footer ─── */
+
+.ex-footer {
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  font-size: 11px;
+  color: #333;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+}
+
+.ex-footer-time {
+  color: #4a5a6a;
+  font-family: 'Consolas', 'Courier New', monospace;
+  letter-spacing: 0.05em;
+}

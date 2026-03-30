@@ -99,6 +99,31 @@
   object-fit: contain;
 }
 
+.exhibition-btn {
+  margin-right: 12px;
+  padding: 5px 14px;
+  background: rgba(99, 149, 255, 0.15);
+  border: 1px solid rgba(99, 149, 255, 0.4);
+  color: #99bbff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.exhibition-btn:hover:not(:disabled) {
+  background: rgba(99, 149, 255, 0.28);
+  border-color: rgba(99, 149, 255, 0.65);
+}
+
+.exhibition-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -275,6 +300,76 @@
   width: 2px;
   background-color: #444;
   flex-shrink: 0;
+}
+
+/* 통합 뷰어 레이아웃 */
+.image-viewer-unified {
+  flex: 1;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+}
+
+.viewer-half {
+  flex: 1;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.viewer-left {
+  border-right: 1px solid #333;
+}
+
+.viewer-hidden {
+  visibility: hidden;
+}
+
+/* 애니메이션 오버레이 */
+.anim-zone {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 50%;
+}
+
+.anim-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #1a1a1a;
+}
+
+/* previous: 왼쪽에서 fade out */
+.anim-prev-out {
+  left: 0;
+  animation: shiftFadeOut 1.1s ease-out both;
+}
+
+/* current: 오른쪽에서 왼쪽으로 슬라이드 */
+.anim-curr-slide {
+  left: 50%;
+  animation: shiftSlideLeft 1.1s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* 새 이미지: 오른쪽에서 fade in */
+.anim-new-fadein {
+  left: 50%;
+  animation: shiftFadeIn 1.0s ease-in both;
+}
+
+@keyframes shiftFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes shiftSlideLeft {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-100%); }
+}
+
+@keyframes shiftFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* Scrollbar styling */

@@ -291,7 +291,7 @@ export class ModbusImageEventService
   }
 
   /**
-   * 이미지 처리 트리거 (2D 복사 + 3D 병합)
+   * 이미지 처리 트리거 (3D 병합만 수행)
    */
   private async triggerImageMerge(): Promise<void> {
     this.isProcessing = true;
@@ -303,26 +303,11 @@ export class ModbusImageEventService
 
       if (result3d.success) {
         console.log('3D 이미지 합치기 성공:', result3d.filename);
-      } else {
-        console.warn('3D 이미지 합치기 실패:', result3d.message);
-      }
-
-      // 2D 이미지 복사
-      console.log('2D 이미지 복사 시작...');
-      const result2d = await this.imageCopyService.copyLatest2dImage();
-
-      if (result2d.success) {
-        console.log('2D 이미지 복사 성공:', result2d.filename);
-      } else {
-        console.warn('2D 이미지 복사 실패:', result2d.message);
-      }
-
-      // 하나라도 성공하면 이벤트 타임스탬프 업데이트
-      if (result3d.success || result2d.success) {
         this.lastEvent = new Date();
         this.error = undefined;
       } else {
-        this.error = `3D: ${result3d.message}, 2D: ${result2d.message}`;
+        console.warn('3D 이미지 합치기 실패:', result3d.message);
+        this.error = result3d.message;
       }
     } catch (error) {
       console.error('이미지 처리 오류:', error);

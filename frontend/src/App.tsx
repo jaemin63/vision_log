@@ -1,9 +1,10 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useReducer } from 'react';
 import './App.css';
 import { ImageList } from './components/ImageList';
 import { ImagePreview } from './components/ImagePreview';
 import { ModeSelector } from './components/ModeSelector';
 import { PollingConfigEditor } from './components/PollingConfigEditor';
+import { ExhibitionViewer } from './components/ExhibitionViewer';
 import { useImageEvents } from './hooks/useImageEvents';
 import type { ImageEvent } from './hooks/useImageEvents';
 import type { ImageMetadata } from './types/image';
@@ -11,19 +12,41 @@ import { api } from './services/api';
 import logoRms from './assets/logo-rms.png';
 
 type Mode = 'manual' | 'auto';
+type Screen = 'viewer' | 'exhibition';
+
+type ImageState = { previous: ImageMetadata | null; current: ImageMetadata | null };
+type ImageAction =
+  | { type: 'shift'; newImage: ImageMetadata }   // current → previous, newImage → current
+  | { type: 'setCurrent'; image: ImageMetadata | null }; // manual select (previous 유지)
+
+function imageReducer(state: ImageState, action: ImageAction): ImageState {
+  switch (action.type) {
+    case 'shift':
+      // 동일 파일명이 중복으로 오면 무시 (같은 이벤트 두 번 수신 방지)
+      if (state.current?.filename === action.newImage.filename) return state;
+      return { previous: state.current, current: action.newImage };
+    case 'setCurrent':
+      return { ...state, current: action.image };
+    default:
+      return state;
+  }
+}
 
 function App() {
+  const [screen, setScreen] = useState<Screen>('viewer');
   const [mode, setMode] = useState<Mode>('manual');
-  const [selectedImage2d, setSelectedImage2d] = useState<ImageMetadata | null>(
-    null
-  );
-  const [selectedImage3d, setSelectedImage3d] = useState<ImageMetadata | null>(
-    null
+  const [{ previous: previousImage, current: currentImage }, dispatchImage] = useReducer(
+    imageReducer,
+    { previous: null, current: null }
   );
   const [isPollingActive, setIsPollingActive] = useState(false);
   const [showConfigEditor, setShowConfigEditor] = useState(false);
   const [isTestLoading, setIsTestLoading] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isShiftAnimating, setIsShiftAnimating] = useState(false);
+  const shiftAnimTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevBeforeShiftRef = useRef<ImageMetadata | null>(null);
+  const currBeforeShiftRef = useRef<ImageMetadata | null>(null);
   const [initialZoomPercent, setInitialZoomPercent] = useState(100);
   const refreshImagesRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -40,25 +63,29 @@ function App() {
     loadViewerConfig();
   }, []);
 
-  // Handle image events from event system (only in Auto mode)
+  const triggerShift = useCallback((newImage: ImageMetadata) => {
+    prevBeforeShiftRef.current = previousImage;
+    currBeforeShiftRef.current = currentImage;
+    dispatchImage({ type: 'shift', newImage });
+    setIsShiftAnimating(true);
+    if (shiftAnimTimerRef.current) clearTimeout(shiftAnimTimerRef.current);
+    shiftAnimTimerRef.current = setTimeout(() => setIsShiftAnimating(false), 1300);
+  }, [dispatchImage, previousImage, currentImage]);
+
+  // Handle image events from event system (Auto mode or triggered by Test button)
   const handleImageEvent = useCallback(
     (event: ImageEvent) => {
-      // Only process events in Auto mode
-      if (mode !== 'auto') {
+      // In manual mode, only process events marked as forced (e.g. from test button)
+      if (mode !== 'auto' && !event.forced) {
         return;
       }
 
-      // Update the appropriate image based on event type
-      const newImage: ImageMetadata = {
-        filename: event.filename,
-        timestamp: event.timestamp,
-      };
-
-      if (event.type === '2d') {
-        setSelectedImage2d(newImage);
-        console.log('2D image updated:', event.filename);
-      } else if (event.type === '3d') {
-        setSelectedImage3d(newImage);
+      if (event.type === '3d') {
+        const newImage: ImageMetadata = {
+          filename: event.filename,
+          timestamp: event.timestamp,
+        };
+        triggerShift(newImage);
         console.log('3D image updated:', event.filename);
       }
 
@@ -67,11 +94,11 @@ function App() {
         refreshImagesRef.current();
       }
     },
-    [mode]
+    [mode, triggerShift]
   );
 
   // Initialize event system
-  useImageEvents(handleImageEvent);
+  const { forceTrigger } = useImageEvents(handleImageEvent);
 
   // Handle mode change
   const handleModeChange = useCallback(
@@ -135,64 +162,26 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isDrawerOpen]);
 
-  // Handle image selection in Manual mode
-  const handleImageSelect2d = useCallback((image: ImageMetadata | null) => {
-    setSelectedImage2d(image);
-  }, []);
-
+  // Handle image selection in Manual mode (only updates current/right panel)
   const handleImageSelect3d = useCallback((image: ImageMetadata | null) => {
-    setSelectedImage3d(image);
-  }, []);
+    dispatchImage({ type: 'setCurrent', image });
+  }, [dispatchImage]);
 
-  // Handle Test button click - merge 3D images and copy 2D image
+  // Handle Test button click - 폴링 에지와 동일한 흐름으로 처리
   const handleTestClick = useCallback(async () => {
     if (isTestLoading) return;
 
     setIsTestLoading(true);
     try {
-      // Run both operations in parallel
-      const [result3d, result2d] = await Promise.allSettled([
-        api.mergeTestImages(),
-        fetch(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/test/copy-2d-image`,
-          { method: 'POST' }
-        ).then((res) => res.json()),
-      ]);
+      const result = await api.mergeTestImages();
 
-      // Handle 3D result
-      if (result3d.status === 'fulfilled' && result3d.value.success) {
-        console.log('3D 이미지 합치기 성공:', result3d.value.filename);
-        if (mode === 'manual') {
-          setSelectedImage3d({
-            filename: result3d.value.filename,
-            timestamp: new Date(),
-          });
-        }
+      if (result.success) {
+        console.log('3D 이미지 합치기 성공:', result.filename);
+        // 폴링 에지와 동일하게 forceTrigger로 current→previous 시프트
+        forceTrigger(result.filename);
       } else {
-        console.warn(
-          '3D 이미지 합치기 실패:',
-          result3d.status === 'fulfilled'
-            ? result3d.value.message
-            : result3d.reason
-        );
-      }
-
-      // Handle 2D result
-      if (result2d.status === 'fulfilled' && result2d.value.success) {
-        console.log('2D 이미지 복사 성공:', result2d.value.filename);
-        if (mode === 'manual') {
-          setSelectedImage2d({
-            filename: result2d.value.filename,
-            timestamp: new Date(),
-          });
-        }
-      } else {
-        console.warn(
-          '2D 이미지 복사 실패:',
-          result2d.status === 'fulfilled'
-            ? result2d.value.message
-            : result2d.reason
-        );
+        console.warn('3D 이미지 합치기 실패:', result.message);
+        alert(result.message);
       }
 
       // Refresh image list
@@ -207,7 +196,32 @@ function App() {
     } finally {
       setIsTestLoading(false);
     }
-  }, [isTestLoading, mode]);
+  }, [isTestLoading, forceTrigger]);
+
+  // Exhibition 버튼: 공유폴더 이미지 합치기 → ExhibitionViewer 표시
+  const [isExhibitionLoading, setIsExhibitionLoading] = useState(false);
+
+  const handleExhibitionClick = useCallback(async () => {
+    if (isExhibitionLoading) return;
+    setIsExhibitionLoading(true);
+    try {
+      const result = await api.demoMerge();
+      if (result.success) {
+        const newImage: ImageMetadata = {
+          filename: result.filename,
+          timestamp: new Date(),
+        };
+        triggerShift(newImage);
+        setScreen('exhibition');
+      } else {
+        alert(result.message);
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '이미지 처리에 실패했습니다.');
+    } finally {
+      setIsExhibitionLoading(false);
+    }
+  }, [isExhibitionLoading, triggerShift]);
 
   const toggleDrawer = () => setIsDrawerOpen((v) => !v);
 
@@ -292,12 +306,6 @@ function App() {
         <div className="drawer-header">Image List</div>
         <div className="drawer-content">
           <ImageList
-            onImageSelect2d={(image) => {
-              handleImageSelect2d(image);
-              if (image) {
-                setIsDrawerOpen(false);
-              }
-            }}
             onImageSelect3d={(image) => {
               handleImageSelect3d(image);
               if (image) {
@@ -316,7 +324,7 @@ function App() {
               className={`test-button-sidebar ${isTestLoading ? 'loading' : ''}`}
               onClick={handleTestClick}
               disabled={isTestLoading}
-              title="이미지 처리 테스트 (2D 복사 + 3D 합치기)"
+              title="공유 폴더에서 3D 이미지 가져와 합치기"
             >
               {isTestLoading ? (
                 <>
@@ -325,6 +333,21 @@ function App() {
                 </>
               ) : (
                 'Test (이미지 처리)'
+              )}
+            </button>
+            <button
+              className={`test-button-sidebar ${isExhibitionLoading ? 'loading' : ''}`}
+              onClick={handleExhibitionClick}
+              disabled={isExhibitionLoading}
+              title="데모 이미지 합성 후 전시 모드 실행"
+            >
+              {isExhibitionLoading ? (
+                <>
+                  <span className="spinner"></span>
+                  처리중...
+                </>
+              ) : (
+                'Image Merge'
               )}
             </button>
           </div>
@@ -343,29 +366,38 @@ function App() {
         onClick={toggleDrawer}
       />
 
-      {/* Main Content - Split Screen */}
+      {/* Main Content - Unified Viewer */}
       <div className="main-content">
-        {/* Left Column - 2D Vision */}
-        <div className="image-column column-2d">
-          <div className="column-header">2D Vision</div>
-          <ImagePreview
-            image={selectedImage2d}
-            imageType="2d"
-            initialZoomPercent={initialZoomPercent}
-          />
-        </div>
+        <div className="image-viewer-unified">
+          {/* Left half - Previous (hidden during animation) */}
+          <div className={`viewer-half viewer-left${isShiftAnimating ? ' viewer-hidden' : ''}`}>
+            <ImagePreview image={previousImage} imageType="3d" initialZoomPercent={initialZoomPercent} />
+          </div>
+          {/* Right half - Current (hidden during animation) */}
+          <div className={`viewer-half viewer-right${isShiftAnimating ? ' viewer-hidden' : ''}`}>
+            <ImagePreview image={currentImage} imageType="3d" initialZoomPercent={initialZoomPercent} />
+          </div>
 
-        {/* Divider */}
-        <div className="column-divider" />
-
-        {/* Right Column - 3D Vision */}
-        <div className="image-column column-3d">
-          <div className="column-header">3D Vision</div>
-          <ImagePreview
-            image={selectedImage3d}
-            imageType="3d"
-            initialZoomPercent={initialZoomPercent}
-          />
+          {/* Animation overlay */}
+          {isShiftAnimating && (
+            <>
+              {prevBeforeShiftRef.current && (
+                <div className="anim-zone anim-prev-out">
+                  <img className="anim-img" src={api.getImageUrl(prevBeforeShiftRef.current.filename, '3d')} alt="" />
+                </div>
+              )}
+              {currBeforeShiftRef.current && (
+                <div className="anim-zone anim-curr-slide">
+                  <img className="anim-img" src={api.getImageUrl(currBeforeShiftRef.current.filename, '3d')} alt="" />
+                </div>
+              )}
+              {currentImage && (
+                <div className="anim-zone anim-new-fadein">
+                  <img className="anim-img" src={api.getImageUrl(currentImage.filename, '3d')} alt="" />
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -380,6 +412,14 @@ function App() {
               api.stopPolling().then(() => api.startPolling());
             }
           }}
+        />
+      )}
+
+      {/* Exhibition Viewer (fullscreen overlay) */}
+      {screen === 'exhibition' && (
+        <ExhibitionViewer
+          onExit={() => setScreen('viewer')}
+          latestMergedFilename={currentImage?.filename ?? null}
         />
       )}
     </div>

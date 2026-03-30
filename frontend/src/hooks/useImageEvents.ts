@@ -5,6 +5,7 @@ export interface ImageEvent {
   filename: string;
   timestamp: Date;
   type: '2d' | '3d';
+  forced?: boolean; // Test button에서 강제 트리거 시 true
 }
 
 type ImageEventHandler = (event: ImageEvent) => void;
@@ -94,7 +95,17 @@ export function useImageEvents(onEvent: ImageEventHandler) {
     };
   }, []);
 
+  const forceTrigger = useCallback((filename: string) => {
+    handlerRef.current({
+      filename,
+      timestamp: new Date(),
+      type: '3d',
+      forced: true,
+    });
+  }, []);
+
   return {
     emitMockEvent, // For testing - remove in production
+    forceTrigger,
   };
 }

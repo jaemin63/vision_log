@@ -53,11 +53,11 @@ const CONFIG_FILE_PATH = join(process.cwd(), 'polling-config.json');
 const DEFAULT_CONFIG: PollingConfig = {
   modbus: {
     enabled: false,
-    host: '192.168.1.100',
+    host: '192.168.0.54',
     port: 502,
     unitId: 1,
     registerType: 'holding',
-    register: 0,
+    register: 99,
     pollIntervalMs: 1000,
     triggers: [{ type: 'transition', from: 0, to: 1 }],
   },
