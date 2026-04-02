@@ -426,3 +426,181 @@
   font-family: 'Consolas', 'Courier New', monospace;
   letter-spacing: 0.05em;
 }
+
+/* ─── Analysis Stats Panel ─── */
+
+.ex-stats-panel {
+  position: absolute;
+  bottom: 36px;
+  right: 28px;
+  width: 380px;
+  background: rgba(6, 10, 18, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 20px;
+  padding: 24px 28px 22px;
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  animation: statsPanelIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes statsPanelIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+.ex-stats-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: rgba(130, 170, 220, 0.55);
+  margin-bottom: 18px;
+  text-transform: uppercase;
+}
+
+/* ─── Orientation Distribution ─── */
+
+.ex-orient-section {
+  margin-bottom: 0;
+}
+
+.ex-orient-title {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: rgba(100, 140, 180, 0.45);
+  margin-bottom: 14px;
+  text-transform: uppercase;
+}
+
+.ex-orient-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ex-orient-labels {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.ex-orient-label-en {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(200, 215, 235, 0.88);
+  display: block;
+  line-height: 1.3;
+}
+
+.ex-orient-label-ko {
+  font-size: 10px;
+  color: rgba(100, 130, 160, 0.5);
+  display: block;
+  line-height: 1.3;
+}
+
+.ex-orient-bar-wrap {
+  flex: 1;
+  height: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.ex-orient-bar {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 1.4s cubic-bezier(0.22, 1, 0.36, 1);
+  opacity: 0.85;
+}
+
+.ex-orient-count {
+  font-size: 16px;
+  font-weight: 600;
+  font-family: 'Consolas', 'Courier New', monospace;
+  width: 22px;
+  text-align: right;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+/* ─── Divider ─── */
+
+.ex-stats-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 18px 0 16px;
+}
+
+/* ─── Coverage & Depth metrics ─── */
+
+.ex-stats-grid {
+  display: flex;
+  gap: 0;
+}
+
+.ex-stat-item {
+  flex: 1;
+  text-align: left;
+  padding: 0 4px;
+}
+
+.ex-stat-item + .ex-stat-item {
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  padding-left: 20px;
+}
+
+.ex-stat-value {
+  font-size: 36px;
+  font-weight: 600;
+  color: rgba(240, 248, 255, 0.92);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  font-family: 'Consolas', 'Courier New', monospace;
+  letter-spacing: -0.02em;
+}
+
+.ex-stat-value-sm {
+  font-size: 30px;
+}
+
+.ex-stat-unit {
+  font-size: 14px;
+  color: rgba(130, 160, 190, 0.55);
+  margin-left: 2px;
+}
+
+.ex-stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(140, 175, 210, 0.55);
+  margin-top: 6px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.ex-stat-sub {
+  font-size: 9px;
+  color: rgba(80, 110, 140, 0.4);
+  margin-top: 2px;
+}
+
+/* Depth bar */
+.ex-stat-bar-wrap {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 99px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.ex-stat-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #3a6aff, #50c8ff);
+  border-radius: 99px;
+  transition: width 0.1s linear;
+  opacity: 0.8;
+}

@@ -25,10 +25,42 @@ function formatTimestamp(date: Date): string {
   return `${y}.${m}.${d}  ${h}:${min}:${s}`;
 }
 
+interface OrientationStats {
+  hubUp: number;
+  flangeUp: number;
+  tilted: number;
+}
+
+interface AnalysisStats {
+  coveragePercent: number;
+  depthScore: number;
+  orientationStats: OrientationStats;
+}
+
 interface ExhibitionViewerProps {
   onExit: () => void;
-  /** Latest merged filename from auto polling — triggers new cycle */
   latestMergedFilename?: string | null;
+  analysisStats?: AnalysisStats | null;
+}
+
+/** 0 → target 카운터 애니메이션 (duration ms) */
+function useCountUp(target: number, duration: number, active: boolean): number {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (!active) { setValue(0); return; }
+    const start = performance.now();
+    let raf: number;
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / duration);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(Math.round(eased * target));
+      if (progress < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration, active]);
+  return value;
 }
 
 const PHASE_DURATION: Record<Exclude<Phase, 'loading' | 'error'>, number> = {
@@ -37,7 +69,7 @@ const PHASE_DURATION: Record<Exclude<Phase, 'loading' | 'error'>, number> = {
   'merged':   11000,  // 합성 완료 이미지 단독 표시
 };
 
-export function ExhibitionViewer({ onExit, latestMergedFilename }: ExhibitionViewerProps) {
+export function ExhibitionViewer({ onExit, latestMergedFilename, analysisStats }: ExhibitionViewerProps) {
   const [phase, setPhase] = useState<Phase>('loading');
   const [rawSet, setRawSet] = useState<RawSet>({ color: null, depth: null, edge: null });
   const [mergedImage, setMergedImage] = useState<MergedImage | null>(null);
@@ -124,6 +156,10 @@ export function ExhibitionViewer({ onExit, latestMergedFilename }: ExhibitionVie
   const edgeUrl   = rawSet.edge   ? api.getRawImageUrl(rawSet.edge,   'edge')  : '';
   const mergedUrl = mergedImage   ? api.getImageUrl(mergedImage.filename, '3d') : '';
 
+  const statsActive = phase === 'merged' && !!analysisStats;
+  const countedCoverage = useCountUp(Math.round((analysisStats?.coveragePercent ?? 0) * 10), 2000, statsActive);
+  const countedDepth    = useCountUp(analysisStats?.depthScore   ?? 0, 2200, statsActive);
+
   return (
     <div className={`exhibition-viewer phase-${phase}`}>
       {/* Header */}
@@ -208,6 +244,64 @@ export function ExhibitionViewer({ onExit, latestMergedFilename }: ExhibitionVie
               <span className="label-en">3D Vision Result</span>
               <span className="label-ko">3D 비전 결과</span>
             </div>
+
+            {/* Analysis Stats Panel */}
+            {analysisStats && (
+              <div className="ex-stats-panel">
+                <div className="ex-stats-title">ANALYSIS RESULTS</div>
+
+                {/* Orientation Distribution */}
+                <div className="ex-orient-section">
+                  <div className="ex-orient-title">ORIENTATION DISTRIBUTION · 자세 분포</div>
+                  {(() => {
+                    const { hubUp, flangeUp, tilted } = analysisStats.orientationStats;
+                    const total = hubUp + flangeUp + tilted || 1;
+                    const rows: { label: string; sub: string; value: number; color: string }[] = [
+                      { label: 'Hub Up',    sub: '정방향',  value: hubUp,    color: '#50c8ff' },
+                      { label: 'Flange Up', sub: '역방향',  value: flangeUp, color: '#a78bfa' },
+                      { label: 'Tilted',    sub: '기울어짐', value: tilted,   color: '#fb923c' },
+                    ];
+                    return rows.map(({ label, sub, value, color }) => (
+                      <div key={label} className="ex-orient-row">
+                        <div className="ex-orient-labels">
+                          <span className="ex-orient-label-en">{label}</span>
+                          <span className="ex-orient-label-ko">{sub}</span>
+                        </div>
+                        <div className="ex-orient-bar-wrap">
+                          <div
+                            className="ex-orient-bar"
+                            style={{
+                              width: statsActive ? `${(value / total) * 100}%` : '0%',
+                              background: color,
+                            }}
+                          />
+                        </div>
+                        <div className="ex-orient-count" style={{ color }}>{value}</div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+
+                <div className="ex-stats-divider" />
+
+                {/* Coverage & Depth */}
+                <div className="ex-stats-grid">
+                  <div className="ex-stat-item">
+                    <div className="ex-stat-value">{(countedCoverage / 10).toFixed(1)}<span className="ex-stat-unit">%</span></div>
+                    <div className="ex-stat-label">Coverage</div>
+                    <div className="ex-stat-sub">검출 커버리지</div>
+                  </div>
+                  <div className="ex-stat-item">
+                    <div className="ex-stat-bar-wrap">
+                      <div className="ex-stat-bar" style={{ width: `${countedDepth}%` }} />
+                    </div>
+                    <div className="ex-stat-value ex-stat-value-sm">{countedDepth}<span className="ex-stat-unit">/100</span></div>
+                    <div className="ex-stat-label">Depth Distribution</div>
+                    <div className="ex-stat-sub">깊이 분포 지수</div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

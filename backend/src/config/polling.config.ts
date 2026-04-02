@@ -45,6 +45,22 @@ export interface PollingConfig {
     pollIntervalMs: number;
     triggers: TriggerCondition[];
   };
+  /** 공유폴더 폴링 설정 */
+  folder: {
+    /** true이면 Modbus 대신 폴더 폴링 사용 */
+    enabled: boolean;
+    /** 감시할 폴더 경로 (UNC 경로 포함) */
+    watchPath: string;
+    /** 폴링 간격 (ms) */
+    pollIntervalMs: number;
+    /**
+     * 마지막 파일 변경 감지 후 실제 트리거까지 대기 시간 (ms)
+     * 로봇이 여러 파일을 순차 저장할 때 모두 쓰인 뒤 트리거되도록 함
+     */
+    debounceMs: number;
+    /** 감시 대상 파일 확장자 패턴 (정규식 문자열) */
+    filePattern: string;
+  };
   viewer: ViewerConfig;
 }
 
@@ -60,6 +76,13 @@ const DEFAULT_CONFIG: PollingConfig = {
     register: 99,
     pollIntervalMs: 1000,
     triggers: [{ type: 'transition', from: 0, to: 1 }],
+  },
+  folder: {
+    enabled: false,
+    watchPath: '',
+    pollIntervalMs: 1000,
+    debounceMs: 2000,
+    filePattern: '\\.(png|PNG|jpg|jpeg)$',
   },
   viewer: {
     initialZoomPercent: 100,
@@ -138,12 +161,15 @@ export class PollingConfigService {
       ...DEFAULT_CONFIG.modbus,
       ...loaded.modbus,
     };
-    // Use loaded triggers if present, otherwise use default
     if (loaded.modbus?.triggers && Array.isArray(loaded.modbus.triggers)) {
       modbus.triggers = loaded.modbus.triggers;
     }
     return {
       modbus,
+      folder: {
+        ...DEFAULT_CONFIG.folder,
+        ...loaded.folder,
+      },
       viewer: {
         ...DEFAULT_CONFIG.viewer,
         ...loaded.viewer,

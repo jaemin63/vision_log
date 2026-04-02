@@ -200,6 +200,7 @@ function App() {
 
   // Exhibition 버튼: 공유폴더 이미지 합치기 → ExhibitionViewer 표시
   const [isExhibitionLoading, setIsExhibitionLoading] = useState(false);
+  const [analysisStats, setAnalysisStats] = useState<{ coveragePercent: number; depthScore: number; orientationStats: { hubUp: number; flangeUp: number; tilted: number } } | null>(null);
 
   const handleExhibitionClick = useCallback(async () => {
     if (isExhibitionLoading) return;
@@ -212,6 +213,7 @@ function App() {
           timestamp: new Date(),
         };
         triggerShift(newImage);
+        setAnalysisStats(result.stats ?? null);
         setScreen('exhibition');
       } else {
         alert(result.message);
@@ -420,6 +422,7 @@ function App() {
         <ExhibitionViewer
           onExit={() => setScreen('viewer')}
           latestMergedFilename={currentImage?.filename ?? null}
+          analysisStats={analysisStats}
         />
       )}
     </div>

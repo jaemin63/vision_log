@@ -110,7 +110,7 @@ export const api = {
   /**
    * Demo: demo_raw 폴더의 고정 파일로 합성 (파일 삭제 없음)
    */
-  async demoMerge(): Promise<{ success: boolean; filename: string; message: string }> {
+  async demoMerge(): Promise<{ success: boolean; filename: string; message: string; stats?: { coveragePercent: number; depthScore: number; orientationStats: { hubUp: number; flangeUp: number; tilted: number } } }> {
     const response = await fetch(`${API_URL}/api/demo/merge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

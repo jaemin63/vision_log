@@ -1,6 +1,6 @@
 {
   "modbus": {
-    "enabled": true,
+    "enabled": false,
     "host": "192.168.0.54",
     "port": 502,
     "unitId": 1,
@@ -12,6 +12,13 @@
       { "type": "transition", "from": 1, "to": 2 },
       { "type": "transition", "from": 2, "to": 3 }
     ]
+  },
+  "folder": {
+    "enabled": true,
+    "watchPath": "C:\\share\\TEST\\Y26APR02\\SUB00003",
+    "pollIntervalMs": 1000,
+    "debounceMs": 2000,
+    "filePattern": "\\.(png|PNG|jpg|jpeg)$"
   },
   "viewer": {
     "initialZoomPercent": 150

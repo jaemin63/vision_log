@@ -37,7 +37,7 @@ export class ImageMergeService {
     const month = ImageMergeService.MONTHS[now.getMonth()];
     const day = String(now.getDate()).padStart(2, '0');
     const dateFolder = `Y${year}${month}${day}`;
-    return join(this.sourceBaseDir, dateFolder, 'SUB00000');
+    return join(this.sourceBaseDir, dateFolder, 'SUB00003');
   }
 
   /**
@@ -251,7 +251,7 @@ export class ImageMergeService {
    * demo_raw 폴더의 고정 파일 3장으로 합성 (파일 삭제 없음)
    * Exhibition 설명용 데모 전용
    */
-  async mergeDemoImages(): Promise<{ success: boolean; filename: string; message: string }> {
+  async mergeDemoImages(): Promise<{ success: boolean; filename: string; message: string; stats?: { coveragePercent: number; depthScore: number; orientationStats: { hubUp: number; flangeUp: number; tilted: number } } }> {
     try {
       await this.ensureDirectory(this.outputDir);
       await this.ensureDirectory(this.rawDataDir);
@@ -291,7 +291,10 @@ export class ImageMergeService {
       const depthFile = depthEntry.file;
       console.log(`[demo] color: ${colorFile}, depth: ${depthFile}, edge: ${edgeFile}`);
 
-      const mergedBuffer = await this.mergeAllThree(depthFile, edgeFile, colorFile, this.demoRawDir);
+      const [mergedBuffer, stats] = await Promise.all([
+        this.mergeAllThree(depthFile, edgeFile, colorFile, this.demoRawDir),
+        this.analyzeImages(colorFile, depthFile, this.demoRawDir),
+      ]);
 
       const now = new Date();
       const filename = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}${String(now.getMilliseconds()).padStart(3, '0')}.png`;
@@ -310,7 +313,7 @@ export class ImageMergeService {
       this.eventEmitter.emit('image.event.3d', { filename, timestamp: now });
       console.log(`[demo] 합성 완료: ${filename}`);
 
-      return { success: true, filename, message: `데모 이미지 합치기 완료: ${filename}` };
+      return { success: true, filename, message: `데모 이미지 합치기 완료: ${filename}`, stats };
     } catch (error) {
       console.error('[demo] 합성 실패:', error);
       return { success: false, filename: '', message: error instanceof Error ? error.message : '알 수 없는 오류' };
@@ -396,6 +399,135 @@ export class ImageMergeService {
       throw new Error('Invalid filename');
     }
     return join(this.rawDataDir, filename);
+  }
+
+  /**
+   * 3장 이미지에서 분석 통계 추출
+   * - coveragePercent  : 비배경 픽셀 비율 (검출 커버리지 %)
+   * - depthScore       : depth map 표준편차 기반 깊이 분포 지수 (0~100)
+   * - orientationStats : 각 부품 블롭의 depth variance로 자세 분류
+   *     정방향(Hub Up)   : 허브 상면 + 플랜지 면 두 레벨 → 중간 variance
+   *     역방향(Flange Up): 평탄한 플랜지 상면 → 낮은 variance
+   *     기울어짐(Tilted) : 높이 차이 큰 gradient → 높은 variance
+   */
+  async analyzeImages(
+    colorFile: string,
+    depthFile: string,
+    sourceDir: string,
+  ): Promise<{ coveragePercent: number; depthScore: number; orientationStats: { hubUp: number; flangeUp: number; tilted: number } }> {
+    try {
+      const colorPath = join(sourceDir, colorFile);
+      const depthPath = join(sourceDir, depthFile);
+
+      // ── color 이미지 로드 ──
+      const { data: cData, info: cInfo } = await sharp(colorPath)
+        .toColourspace('srgb')
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      const W = cInfo.width, H = cInfo.height, CH = cInfo.channels;
+
+      // ── depth 이미지 로드 (color와 동일 해상도로 정렬) ──
+      const { data: dData } = await sharp(depthPath)
+        .grayscale()
+        .resize(W, H, { fit: 'fill' })
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+
+      // ── 비배경 픽셀 마스크 & colorKey ──
+      const colorKey = new Int32Array(W * H); // 0 = background
+      let colorPixels = 0;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * CH;
+          const r = cData[i], g = cData[i + 1], b = cData[i + 2];
+          const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+          if (luma > this.blackThreshold) {
+            colorPixels++;
+            colorKey[y * W + x] = (r << 16) | (g << 8) | b;
+          }
+        }
+      }
+      const totalPixels = W * H;
+      const coveragePercent = Math.round((colorPixels / totalPixels) * 1000) / 10;
+
+      // ── BFS: 색상 블롭별 픽셀 수집 ──
+      const NOISE_THRESHOLD_PX = 30;
+      const RELATIVE_THRESHOLD = 0.30;
+      const visited = new Uint8Array(W * H);
+      const colorBlobsMap = new Map<number, number[][]>();
+      const queue: number[] = [];
+
+      for (let start = 0; start < W * H; start++) {
+        if (!colorKey[start] || visited[start]) continue;
+        const targetColor = colorKey[start];
+        queue.length = 0;
+        queue.push(start);
+        visited[start] = 1;
+        const pixels: number[] = [];
+        while (queue.length) {
+          const idx = queue.pop()!;
+          pixels.push(idx);
+          const cx = idx % W, cy = Math.floor(idx / W);
+          for (const [nx, ny] of [[cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1]]) {
+            if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+            const ni = ny * W + nx;
+            if (!visited[ni] && colorKey[ni] === targetColor) {
+              visited[ni] = 1;
+              queue.push(ni);
+            }
+          }
+        }
+        if (pixels.length >= NOISE_THRESHOLD_PX) {
+          const arr = colorBlobsMap.get(targetColor) ?? [];
+          arr.push(pixels);
+          colorBlobsMap.set(targetColor, arr);
+        }
+      }
+
+      // ── 유효 블롭 선별 (색상별 상대 임계값으로 파편 제거) ──
+      const validBlobs: number[][] = [];
+      for (const blobs of colorBlobsMap.values()) {
+        const maxSize = Math.max(...blobs.map(b => b.length));
+        for (const blob of blobs) {
+          if (blob.length >= maxSize * RELATIVE_THRESHOLD) validBlobs.push(blob);
+        }
+      }
+
+      // ── 자세 분류: 블롭 내 depth 표준편차 기반 ──
+      // 플랜지 허브 top-down 뷰:
+      //   정방향(Hub Up)   : 허브 상면 + 플랜지 면 → 두 높이 레벨 → stdev 중간
+      //   역방향(Flange Up): 평탄한 플랜지 상면 → stdev 낮음
+      //   기울어짐(Tilted) : 부품 전체가 기울어짐 → stdev 높음
+      const TILT_STDEV = 22;
+      const HUB_STDEV  = 8;
+      let hubUp = 0, flangeUp = 0, tilted = 0;
+
+      for (const pixels of validBlobs) {
+        // 최대 500픽셀 stride 샘플링 (성능)
+        const step = Math.max(1, Math.floor(pixels.length / 500));
+        let sum = 0, count = 0;
+        for (let i = 0; i < pixels.length; i += step) { sum += dData[pixels[i]]; count++; }
+        const mean = sum / count;
+        let sqSum = 0;
+        for (let i = 0; i < pixels.length; i += step) { const d = dData[pixels[i]] - mean; sqSum += d * d; }
+        const stdev = Math.sqrt(sqSum / count);
+
+        if (stdev >= TILT_STDEV)     tilted++;
+        else if (stdev >= HUB_STDEV) hubUp++;
+        else                          flangeUp++;
+      }
+
+      // ── depth 전체 분포 지수 ──
+      const depthStats = await sharp(depthPath).stats();
+      const globalStdev = depthStats.channels[0]?.stdev ?? 0;
+      const maxVal      = depthStats.channels[0]?.max   ?? 1;
+      const depthScore  = Math.min(100, Math.round((globalStdev / (maxVal * 0.3)) * 100));
+
+      return { coveragePercent, depthScore, orientationStats: { hubUp, flangeUp, tilted } };
+    } catch {
+      return { coveragePercent: 0, depthScore: 0, orientationStats: { hubUp: 0, flangeUp: 0, tilted: 0 } };
+    }
   }
 
   /**
