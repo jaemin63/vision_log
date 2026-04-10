@@ -263,6 +263,19 @@ export class ImageController {
   }
 
   /**
+   * 로봇 상태 레지스터 값 + 메시지 반환
+   * GET /api/events/robot-status
+   */
+  @Get('api/events/robot-status')
+  getRobotStatus() {
+    const s = this.imageEventService.getStatus() as any;
+    return {
+      value:   s.statusValue   ?? 0,
+      message: s.statusMessage ?? '',
+    };
+  }
+
+  /**
    * Start polling service
    * POST /api/events/polling/start
    */
@@ -419,7 +432,9 @@ export class ImageController {
   @Post('api/test/merge-images')
   async mergeImages() {
     try {
-      const result = await this.imageMergeService.mergeAndSaveImages();
+      const result = await this.imageMergeService.mergeAndSaveImages({
+        forcedEvent: true,
+      });
 
       if (!result.success) {
         throw new HttpException(
@@ -446,6 +461,17 @@ export class ImageController {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  /**
+   * 배치 분석: 지정 폴더의 IM* 파일을 3장씩 묶어 분석 후 JSONL 로그 저장
+   * POST /api/test/batch-analyze
+   * Body: { folderPath?: string }  (없으면 기본 공유 폴더 사용)
+   */
+  @Post('api/test/batch-analyze')
+  async batchAnalyze(@Body() body: { folderPath?: string }) {
+    const folderPath = body?.folderPath || 'C:\\share\\TEST\\Y26APR07\\SUB00001';
+    return this.imageMergeService.batchAnalyzeFolder(folderPath);
   }
 
   /**

@@ -1,5 +1,84 @@
 # Image Logger - Project Plan
 
+---
+
+## 전시 개선 계획 (2026-03-26 추가)
+
+### 현재 상태
+- 3장 원본 이미지(IM*) 취득 중, 합성은 2장만 사용
+  - index 0: 컬러 세그멘테이션 (ch:3) ← 사용 중
+  - index 1: Depth map (ch:1 grayscale) ← 사용 중
+  - index 2: Edge/Normal map (ch:3) ← **미사용**
+- 결과: depth 회색 배경 + color 오버레이 (Fanuc과 유사하나 edge 미반영)
+
+---
+
+### STEP 1. 3장 합성으로 Fanuc 최종 이미지 수준으로 개선 ← **현재 진행**
+
+**목표**: index 2 (edge/normal map)를 활용해 Fanuc iRVision 출력물과 시각적으로 동일한 수준의 합성 이미지 생성
+
+**합성 순서**
+```
+1. Base  : index 1 (depth map)  → 정규화하여 회색 배경
+2. Layer : index 2 (edge map)   → depth 위에 경계선/질감 블렌딩
+3. Top   : index 0 (color seg.) → 최상단에 컬러 객체 오버레이
+```
+
+**작업 파일**: `backend/src/image/services/image-merge.service.ts`
+- [ ] edge map 블렌딩 방식 결정 (multiply / soft-light / 단순 overlay)
+- [ ] 3장 합성 후 Fanuc 결과물과 육안 비교 및 파라미터 조정
+
+---
+
+### STEP 2. 전시용 애니메이션 뷰어 구현
+
+**목표**: 3장의 원본 이미지가 합쳐지는 과정을 시각적으로 보여주는 전시용 화면
+
+**화면 구성 흐름**
+```
+[Phase 1] 3장 나란히 표시 + 하단 설명 텍스트 (2~3초)
+  ┌──────────┐  ┌──────────┐  ┌──────────┐
+  │  Color   │  │  Depth   │  │  Edge    │
+  │          │  │          │  │          │
+  └──────────┘  └──────────┘  └──────────┘
+  Object        3D Depth      Surface
+  Recognition   Map           Edge
+
+[Phase 2] 애니메이션: 레이어 쌓기 방식으로 합쳐짐 (1~2초)
+  - depth 배경 먼저 깔리고
+  - edge 오버레이
+  - color 세그멘테이션 내려앉으며 완성
+
+[Phase 3] 합성 완료 이미지 1장 표시 (3~4초)
+
+[Phase 4] 새 픽킹 사이클 발생 시 자동 반복
+```
+
+**추가 UI 요소**
+- 각 이미지 하단 설명 텍스트 (한/영 병행)
+- 우측 상단 "LIVE" 배지 (자동 모드 시)
+- 처리 시간 표시: "Processed in X.Xs"
+- 픽킹 사이클 카운터: "Cycle #N"
+
+**작업 내용**
+- [ ] 백엔드: 최신 원본 3장 이미지 반환 API 추가
+  - `GET /api/images/3d-raw/latest` → 가장 최근 세트(3장) 반환
+- [ ] 프론트엔드: 전시용 뷰어 컴포넌트 `ExhibitionViewer.tsx` 신규 구현
+  - CSS keyframes 기반 애니메이션 (외부 라이브러리 불필요)
+  - 자동 루프 / 폴링 트리거 시 재생 모드
+
+---
+
+### 진행 순서
+- [x] STEP 1: 3장 합성 완료 → Fanuc 결과물과 육안 비교 확인 (2026-03-27)
+- [x] STEP 2-1: 백엔드 원본 3장 API 추가 (`GET /api/images/3d-raw/latest`, `GET /api/images/3d-raw/:filename`)
+- [x] STEP 2-2: 프론트엔드 전시 애니메이션 뷰어 구현 (`ExhibitionViewer.tsx`)
+- [x] STEP 2-3: 기존 화면 우측 상단 "Exhibition" 버튼으로 전환
+- [ ] STEP 2-4: 전체 테스트 및 파라미터 조정
+
+---
+
+
 ## 1. OVERALL PLAN
 
 ### System Architecture

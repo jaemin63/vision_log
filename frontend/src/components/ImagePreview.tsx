@@ -7,12 +7,14 @@ interface ImagePreviewProps {
   image: ImageMetadata | null;
   imageType: '2d' | '3d';
   initialZoomPercent?: number;
+  footerLabel?: string;
 }
 
 export function ImagePreview({
   image,
   imageType,
   initialZoomPercent = 100,
+  footerLabel,
 }: ImagePreviewProps) {
   // 파일명 기반으로 로드/에러 추적 → useEffect 타이밍 race condition 방지
   const [loadedFilename, setLoadedFilename] = useState<string | null>(null);
@@ -302,6 +304,7 @@ export function ImagePreview({
           </div>
         )}
       </div>
+      {footerLabel && <div className="image-preview-footer-label">{footerLabel}</div>}
     </div>
   );
 }

@@ -1,21 +1,44 @@
 {
+  "api": {
+    "enabled": true,
+    "serverUrl": "https://192.168.0.4:3000",
+    "robotId": 14,
+    "registerType": "holding",
+    "register": 100,
+    "pollIntervalMs": 1000,
+    "triggers": [
+      { "type": "transition", "from": 0, "to": 1 }
+    ],
+    "rejectUnauthorized": false,
+    "statusRegister": 102,
+    "statusMessages": {
+      "0": "빈 피킹 프로그램 자동 생성 반복 시연 (Bin Picking with Auto Path Generation)",
+      "1": "소재 원복 중...",
+      "2": "빈 피킹 프로그램 자동 생성 공급 (Bin Picking with Auto Path Generation)"
+    }
+  },
   "modbus": {
     "enabled": false,
-    "host": "192.168.0.54",
+    "host": "10.34.1.83",
     "port": 502,
     "unitId": 1,
     "registerType": "holding",
     "register": 99,
     "pollIntervalMs": 1000,
     "triggers": [
-      { "type": "transition", "from": 0, "to": 1 },
-      { "type": "transition", "from": 1, "to": 2 },
-      { "type": "transition", "from": 2, "to": 3 }
-    ]
+      { "type": "transition", "from": 0, "to": 1 }
+    ],
+    "statusRegister": 102,
+    "statusMessages": {
+      "0": "빈 피킹 프로그램 자동 생성 반복 시연 (Bin Picking with Auto Path Generation)",
+      "1": "소재 원복 중...",
+      "2": "빈 피킹 프로그램 자동 생성 공급 (Bin Picking with Auto Path Generation)"
+    }
   },
   "folder": {
-    "enabled": true,
-    "watchPath": "C:\\share\\TEST\\Y26APR02\\SUB00003",
+    "enabled": false,
+    "watchPath": "C:\\share\\TEST\\Y26APR03",
+    "autoLatestSubfolder": true,
     "pollIntervalMs": 1000,
     "debounceMs": 2000,
     "filePattern": "\\.(png|PNG|jpg|jpeg)$"

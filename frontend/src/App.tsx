@@ -1,15 +1,18 @@
 import { useState, useCallback, useEffect, useRef, useReducer } from 'react';
 import './App.css';
+import logoDN from './assets/DN_Solutions_logo.svg.png';
+import logoFanuc from './assets/Fanuc_logo.svg.png';
 import { ImageList } from './components/ImageList';
 import { ImagePreview } from './components/ImagePreview';
 import { ModeSelector } from './components/ModeSelector';
 import { PollingConfigEditor } from './components/PollingConfigEditor';
 import { ExhibitionViewer } from './components/ExhibitionViewer';
+import { AnalysisStatsPanel } from './components/AnalysisStatsPanel';
+import type { AnalysisStats } from './components/AnalysisStatsPanel';
 import { useImageEvents } from './hooks/useImageEvents';
 import type { ImageEvent } from './hooks/useImageEvents';
 import type { ImageMetadata } from './types/image';
-import { api } from './services/api';
-import logoRms from './assets/logo-rms.png';
+import { api, getApiBaseUrl } from './services/api';
 
 type Mode = 'manual' | 'auto';
 type Screen = 'viewer' | 'exhibition';
@@ -32,6 +35,35 @@ function imageReducer(state: ImageState, action: ImageAction): ImageState {
   }
 }
 
+function getRobotStatusTone(statusValue: number | undefined): 'idle' | 'active' | 'done' | 'error' {
+  if (statusValue === 9) return 'error';
+  if (statusValue === 4) return 'done';
+  if (statusValue === 0 || statusValue === undefined) return 'idle';
+  return 'active';
+}
+
+function renderRobotStatusMessage(message: string) {
+  const highlightTargets = [
+    '빈 피킹 프로그램 자동 생성',
+    'Bin Picking with Auto Path Generation',
+  ];
+
+  for (const target of highlightTargets) {
+    if (!message.includes(target)) continue;
+
+    const [before, ...rest] = message.split(target);
+    return (
+      <>
+        {before}
+        <span className="robot-status-highlight">{target}</span>
+        {rest.join(target)}
+      </>
+    );
+  }
+
+  return message;
+}
+
 function App() {
   const [screen, setScreen] = useState<Screen>('viewer');
   const [mode, setMode] = useState<Mode>('manual');
@@ -49,6 +81,13 @@ function App() {
   const currBeforeShiftRef = useRef<ImageMetadata | null>(null);
   const [initialZoomPercent, setInitialZoomPercent] = useState(100);
   const refreshImagesRef = useRef<(() => Promise<void>) | null>(null);
+  const [robotStatus, setRobotStatus] = useState<{ value: number; message: string } | null>(null);
+  const [showControlPanel, setShowControlPanel] = useState(false);
+  const [showAnalysisPanel, setShowAnalysisPanel] = useState(true);
+  const [viewerAnalysisStats, setViewerAnalysisStats] = useState<AnalysisStats | null>(null);
+  const [previousAnalysisStats, setPreviousAnalysisStats] = useState<AnalysisStats | null>(null);
+  const prevStatsRef = useRef<AnalysisStats | null>(null);       // 애니메이션 중 current stats
+  const prevPrevStatsRef = useRef<AnalysisStats | null>(null);   // 애니메이션 중 previous stats
 
   // Load viewer config on mount
   useEffect(() => {
@@ -81,6 +120,13 @@ function App() {
       }
 
       if (event.type === '3d') {
+        if (event.stats) {
+          prevPrevStatsRef.current = previousAnalysisStats;
+          prevStatsRef.current = viewerAnalysisStats;
+          setPreviousAnalysisStats(viewerAnalysisStats);
+          setViewerAnalysisStats(event.stats);
+        }
+
         const newImage: ImageMetadata = {
           filename: event.filename,
           timestamp: event.timestamp,
@@ -94,11 +140,11 @@ function App() {
         refreshImagesRef.current();
       }
     },
-    [mode, triggerShift]
+    [mode, triggerShift, previousAnalysisStats, viewerAnalysisStats]
   );
 
   // Initialize event system
-  const { forceTrigger } = useImageEvents(handleImageEvent);
+  useImageEvents(handleImageEvent);
 
   // Handle mode change
   const handleModeChange = useCallback(
@@ -137,7 +183,7 @@ function App() {
     const checkPollingStatus = async () => {
       try {
         const status = await fetch(
-          `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/events/status`
+          `${getApiBaseUrl()}/api/events/status`
         ).then((res) => res.json());
         setIsPollingActive(status.running || false);
       } catch (error) {
@@ -151,16 +197,44 @@ function App() {
     return () => clearInterval(interval);
   }, [mode]);
 
-  // ESC key to close drawer
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadRobotStatus = async () => {
+      try {
+        const status = await api.getRobotStatus();
+        if (!isMounted) return;
+        setRobotStatus(status.message ? status : null);
+      } catch (error) {
+        if (!isMounted) return;
+        console.error('Failed to load robot status:', error);
+      }
+    };
+
+    loadRobotStatus();
+    const interval = setInterval(loadRobotStatus, 1000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [mode, isPollingActive]);
+
+  // 단축키 처리
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isDrawerOpen) {
-        setIsDrawerOpen(false);
+      if (e.key === 'Escape') {
+        if (showControlPanel) { setShowControlPanel(false); return; }
+        if (isDrawerOpen) setIsDrawerOpen(false);
+      }
+      if (e.ctrlKey && e.key === 'F1') {
+        e.preventDefault();
+        setShowControlPanel((v) => !v);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawerOpen]);
+  }, [isDrawerOpen, showControlPanel]);
 
   // Handle image selection in Manual mode (only updates current/right panel)
   const handleImageSelect3d = useCallback((image: ImageMetadata | null) => {
@@ -177,8 +251,6 @@ function App() {
 
       if (result.success) {
         console.log('3D 이미지 합치기 성공:', result.filename);
-        // 폴링 에지와 동일하게 forceTrigger로 current→previous 시프트
-        forceTrigger(result.filename);
       } else {
         console.warn('3D 이미지 합치기 실패:', result.message);
         alert(result.message);
@@ -196,7 +268,7 @@ function App() {
     } finally {
       setIsTestLoading(false);
     }
-  }, [isTestLoading, forceTrigger]);
+  }, [isTestLoading]);
 
   // Exhibition 버튼: 공유폴더 이미지 합치기 → ExhibitionViewer 표시
   const [isExhibitionLoading, setIsExhibitionLoading] = useState(false);
@@ -237,6 +309,8 @@ function App() {
     }
   }, []);
 
+  const robotStatusTone = getRobotStatusTone(robotStatus?.value);
+  const robotStatusTitle = robotStatus?.message || '상태 미수신';
   return (
     <div className="app">
       {/* Top Menu Bar */}
@@ -296,7 +370,11 @@ function App() {
         </div>
         <div className="menu-title">3D Bin Picking Image Viewer</div>
         <div className="menu-right">
-          <img src={logoRms} alt="idooRMS+" className="rms-logo" />
+          <div className="partner-logos">
+            <img src={logoDN} alt="DN Solutions" className="partner-logo" />
+            <span className="partner-logo-x">×</span>
+            <img src={logoFanuc} alt="FANUC" className="partner-logo" />
+          </div>
         </div>
       </div>
 
@@ -320,39 +398,6 @@ function App() {
           />
         </div>
         <div className="drawer-footer">
-          {/* Test Button in Sidebar */}
-          <div className="test-button-wrapper">
-            <button
-              className={`test-button-sidebar ${isTestLoading ? 'loading' : ''}`}
-              onClick={handleTestClick}
-              disabled={isTestLoading}
-              title="공유 폴더에서 3D 이미지 가져와 합치기"
-            >
-              {isTestLoading ? (
-                <>
-                  <span className="spinner"></span>
-                  처리중...
-                </>
-              ) : (
-                'Test (이미지 처리)'
-              )}
-            </button>
-            <button
-              className={`test-button-sidebar ${isExhibitionLoading ? 'loading' : ''}`}
-              onClick={handleExhibitionClick}
-              disabled={isExhibitionLoading}
-              title="데모 이미지 합성 후 전시 모드 실행"
-            >
-              {isExhibitionLoading ? (
-                <>
-                  <span className="spinner"></span>
-                  처리중...
-                </>
-              ) : (
-                'Image Merge'
-              )}
-            </button>
-          </div>
           <ModeSelector
             mode={mode}
             onModeChange={handleModeChange}
@@ -370,14 +415,43 @@ function App() {
 
       {/* Main Content - Unified Viewer */}
       <div className="main-content">
-        <div className="image-viewer-unified">
-          {/* Left half - Previous (hidden during animation) */}
-          <div className={`viewer-half viewer-left${isShiftAnimating ? ' viewer-hidden' : ''}`}>
-            <ImagePreview image={previousImage} imageType="3d" initialZoomPercent={initialZoomPercent} />
+        <div className={`robot-status-banner ${robotStatusTone}`}>
+          <div className="robot-status-banner-label">Robot Operation</div>
+          <div className="robot-status-banner-main">
+            <span className="robot-status-dot" />
+            <span className="robot-status-banner-title">
+              {renderRobotStatusMessage(robotStatusTitle)}
+            </span>
           </div>
-          {/* Right half - Current (hidden during animation) */}
+        </div>
+        <div className="image-viewer-unified">
+          {/* Left half - Current (hidden during animation) */}
+          <div className={`viewer-half viewer-left${isShiftAnimating ? ' viewer-hidden' : ''}`}>
+            <ImagePreview
+              image={currentImage}
+              imageType="3d"
+              initialZoomPercent={initialZoomPercent}
+              footerLabel="Current Vision Image"
+            />
+            {showAnalysisPanel && viewerAnalysisStats && (
+              <div className="viewer-analysis-overlay">
+                <AnalysisStatsPanel stats={viewerAnalysisStats} />
+              </div>
+            )}
+          </div>
+          {/* Right half - Previous (hidden during animation) */}
           <div className={`viewer-half viewer-right${isShiftAnimating ? ' viewer-hidden' : ''}`}>
-            <ImagePreview image={currentImage} imageType="3d" initialZoomPercent={initialZoomPercent} />
+            <ImagePreview
+              image={previousImage}
+              imageType="3d"
+              initialZoomPercent={initialZoomPercent}
+              footerLabel="Previous Vision Image"
+            />
+            {showAnalysisPanel && previousAnalysisStats && (
+              <div className="viewer-analysis-overlay">
+                <AnalysisStatsPanel stats={previousAnalysisStats} />
+              </div>
+            )}
           </div>
 
           {/* Animation overlay */}
@@ -386,11 +460,21 @@ function App() {
               {prevBeforeShiftRef.current && (
                 <div className="anim-zone anim-prev-out">
                   <img className="anim-img" src={api.getImageUrl(prevBeforeShiftRef.current.filename, '3d')} alt="" />
+                  {showAnalysisPanel && prevPrevStatsRef.current && (
+                    <div className="viewer-analysis-overlay">
+                      <AnalysisStatsPanel stats={prevPrevStatsRef.current} />
+                    </div>
+                  )}
                 </div>
               )}
               {currBeforeShiftRef.current && (
                 <div className="anim-zone anim-curr-slide">
                   <img className="anim-img" src={api.getImageUrl(currBeforeShiftRef.current.filename, '3d')} alt="" />
+                  {showAnalysisPanel && prevStatsRef.current && (
+                    <div className="viewer-analysis-overlay">
+                      <AnalysisStatsPanel stats={prevStatsRef.current} />
+                    </div>
+                  )}
                 </div>
               )}
               {currentImage && (
@@ -400,8 +484,47 @@ function App() {
               )}
             </>
           )}
+
         </div>
       </div>
+
+      {/* Control Panel (Ctrl+F1) */}
+      {showControlPanel && (
+        <div className="control-panel-overlay" onClick={() => setShowControlPanel(false)}>
+          <div className="control-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="control-panel-header">
+              <span className="control-panel-title">Control Panel</span>
+              <span className="control-panel-shortcut">Ctrl+F1</span>
+              <button className="control-panel-close" onClick={() => setShowControlPanel(false)}>×</button>
+            </div>
+            <div className="control-panel-body">
+              <button
+                className={`cp-btn cp-btn-test${isTestLoading ? ' loading' : ''}`}
+                onClick={handleTestClick}
+                disabled={isTestLoading}
+              >
+                {isTestLoading ? <><span className="spinner" />처리중...</> : 'Test (이미지 처리)'}
+              </button>
+              <button
+                className={`cp-btn cp-btn-merge${isExhibitionLoading ? ' loading' : ''}`}
+                onClick={handleExhibitionClick}
+                disabled={isExhibitionLoading}
+              >
+                {isExhibitionLoading ? <><span className="spinner" />처리중...</> : 'Image Merge'}
+              </button>
+              <div className="cp-divider" />
+              <label className="cp-toggle">
+                <input
+                  type="checkbox"
+                  checked={showAnalysisPanel}
+                  onChange={(e) => setShowAnalysisPanel(e.target.checked)}
+                />
+                <span className="cp-toggle-label">분석 패널 표시</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Config Editor Modal */}
       {showConfigEditor && (

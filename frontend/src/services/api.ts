@@ -1,6 +1,24 @@
 import type { ImageMetadata } from '../types/image';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+export function getApiBaseUrl(): string {
+  const configuredUrl = import.meta.env.VITE_API_URL?.trim();
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/+$/, '');
+  }
+
+  if (typeof window !== 'undefined') {
+    const url = new URL(window.location.href);
+    url.port = '3000';
+    url.pathname = '';
+    url.search = '';
+    url.hash = '';
+    return url.origin;
+  }
+
+  return 'http://localhost:3000';
+}
+
+const API_URL = getApiBaseUrl();
 
 export const api = {
   /**
@@ -126,7 +144,7 @@ export const api = {
    * Test: Merge 3D images
    * 3d_raw_data 폴더의 이미지를 합쳐서 3d_image에 저장
    */
-  async mergeTestImages(): Promise<{ success: boolean; filename: string; message: string }> {
+  async mergeTestImages(): Promise<{ success: boolean; filename: string; message: string; stats?: { coveragePercent: number; depthScore: number; orientationStats: { hubUp: number; flangeUp: number; tilted: number } } }> {
     const response = await fetch(`${API_URL}/api/test/merge-images`, {
       method: 'POST',
       headers: {
@@ -192,5 +210,14 @@ export const api = {
   async getLatestMergedImage(): Promise<ImageMetadata | null> {
     const images = await this.getImages3d();
     return images.length > 0 ? images[0] : null;
+  },
+
+  /**
+   * 로봇 상태 레지스터 값 + 메시지 조회
+   */
+  async getRobotStatus(): Promise<{ value: number; message: string }> {
+    const response = await fetch(`${API_URL}/api/events/robot-status`);
+    if (!response.ok) return { value: 0, message: '' };
+    return response.json();
   },
 };

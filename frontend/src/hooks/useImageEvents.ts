@@ -1,10 +1,20 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { getApiBaseUrl } from '../services/api';
 
 export interface ImageEvent {
   filename: string;
   timestamp: Date;
   type: '2d' | '3d';
+  stats?: {
+    coveragePercent: number;
+    depthScore: number;
+    orientationStats: {
+      hubUp: number;
+      flangeUp: number;
+      tilted: number;
+    };
+  };
   forced?: boolean; // Test button에서 강제 트리거 시 true
 }
 
@@ -35,7 +45,7 @@ export function useImageEvents(onEvent: ImageEventHandler) {
 
   // Socket.IO connection setup
   useEffect(() => {
-    const serverUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const serverUrl = getApiBaseUrl();
     console.log('Connecting to Socket.IO:', `${serverUrl}/events`);
     
     const socket: Socket = io(`${serverUrl}/events`, {
@@ -62,12 +72,14 @@ export function useImageEvents(onEvent: ImageEventHandler) {
       });
     });
 
-    socket.on('image-event-3d', (data: { type: string; filename: string; timestamp: string }) => {
+    socket.on('image-event-3d', (data: { type: string; filename: string; timestamp: string; forced?: boolean; stats?: { coveragePercent: number; depthScore: number; orientationStats: { hubUp: number; flangeUp: number; tilted: number } } }) => {
       console.log('3D Image event received:', data);
       handlerRef.current({
         filename: data.filename,
         timestamp: new Date(data.timestamp),
         type: '3d',
+        forced: data.forced ?? false,
+        stats: data.stats,
       });
     });
 

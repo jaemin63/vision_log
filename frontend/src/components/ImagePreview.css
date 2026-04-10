@@ -3,34 +3,37 @@
   flex-direction: column;
   height: 100%;
   width: 100%;
-  position: relative;
   flex: 1;
+  background: linear-gradient(180deg, rgba(22, 22, 22, 0.96) 0%, rgba(16, 16, 16, 1) 100%);
 }
 
 .image-preview-header {
-  padding: 0.5rem 1rem;
-  background-color: rgba(0, 0, 0, 0.7);
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 15;
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1.25rem;
+  min-height: 46px;
+  padding: 0.45rem 1rem;
+  background: rgba(8, 8, 8, 0.88);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: wrap;
+  align-content: center;
 }
 
 .image-preview-filename {
+  min-width: 0;
+  max-width: 46%;
   font-weight: 600;
   font-size: 0.95rem;
   color: rgba(255, 255, 255, 0.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .image-preview-timestamp {
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.58);
+  white-space: nowrap;
 }
 
 .image-preview-container {
@@ -44,8 +47,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Padding to account for header overlay */
-  padding-top: 40px;
+  min-height: 0;
 }
 
 .image-preview-img {
@@ -193,4 +195,17 @@
 
 .zoom-fullscreen-button:hover {
   background-color: #0056cc;
+}
+
+.image-preview-footer-label {
+  flex-shrink: 0;
+  padding: 0.9rem 1rem 1.05rem;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(214, 226, 255, 0.88);
+  text-transform: uppercase;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(14, 18, 28, 0.92) 0%, rgba(10, 12, 18, 0.98) 100%);
 }

@@ -29,24 +29,44 @@ export class ImageMergeService {
 
   /**
    * 오늘 날짜 기반 소스 디렉토리 경로 반환
-   * 형식: C:\share\TEST\Y{YY}{MMM}{DD}\SUB00000
+   * 형식: C:\share\TEST\Y{YY}{MMM}{DD}\SUB{highest}
+   * SUB 폴더 중 숫자가 가장 높은 것을 자동 선택 (없으면 SUB00001 fallback)
    */
-  private getSourceDir(): string {
+  private async getSourceDir(): Promise<string> {
     const now = new Date();
     const year = String(now.getFullYear()).slice(-2);
     const month = ImageMergeService.MONTHS[now.getMonth()];
     const day = String(now.getDate()).padStart(2, '0');
     const dateFolder = `Y${year}${month}${day}`;
-    return join(this.sourceBaseDir, dateFolder, 'SUB00003');
+    const datePath = join(this.sourceBaseDir, dateFolder);
+
+    try {
+      const entries = await fs.readdir(datePath, { withFileTypes: true });
+      const subs = entries
+        .filter(e => e.isDirectory() && /\d+$/.test(e.name))
+        .map(e => e.name)
+        .sort(); // 제로패딩이므로 사전순 = 숫자순
+      if (subs.length > 0) {
+        const latest = subs[subs.length - 1];
+        console.log(`[getSourceDir] 최신 SUB 폴더: ${latest}`);
+        return join(datePath, latest);
+      }
+    } catch {
+      // 날짜 폴더 자체가 없는 경우 fallback
+    }
+
+    return join(datePath, 'SUB00001');
   }
 
   /**
    * C:\share\TEST\{날짜}\SUB00000 폴더의 IM* 이미지 3장을 합쳐서 3d_image에 저장
    * 처리 완료 후 소스 폴더의 모든 파일 삭제
    */
-  async mergeAndSaveImages(): Promise<{ success: boolean; filename: string; message: string }> {
+  async mergeAndSaveImages(options?: {
+    forcedEvent?: boolean;
+  }): Promise<{ success: boolean; filename: string; message: string; stats?: { coveragePercent: number; depthScore: number; orientationStats: { hubUp: number; flangeUp: number; tilted: number } } }> {
     try {
-      const sourceDir = this.getSourceDir();
+      const sourceDir = await this.getSourceDir();
       console.log(`소스 디렉토리: ${sourceDir}`);
 
       // 출력 폴더 확인 및 생성
@@ -115,6 +135,9 @@ export class ImageMergeService {
       await fs.writeFile(outputPath, mergedBuffer);
       console.log(`합쳐진 이미지 저장: ${outputPath}`);
 
+      // 파일 삭제 전 분석 (analyzeImages는 sourceDir의 원본 파일 필요)
+      const stats = await this.analyzeImages(colorFile, depthFile, sourceDir);
+
       // 소스 폴더의 모든 파일을 3d_raw_data에 백업 후 삭제
       await this.ensureDirectory(this.rawDataDir);
       const allFiles = await fs.readdir(sourceDir);
@@ -135,12 +158,15 @@ export class ImageMergeService {
       this.eventEmitter.emit('image.event.3d', {
         filename,
         timestamp: now,
+        forced: options?.forcedEvent ?? false,
+        stats,
       });
 
       return {
         success: true,
         filename,
         message: `이미지 합치기 완료: ${filename}`,
+        stats,
       };
     } catch (error) {
       console.error('이미지 합치기 실패:', error);
@@ -324,7 +350,7 @@ export class ImageMergeService {
    * 소스 디렉토리 현재 상태 확인
    */
   async getRawDataStatus(): Promise<{ count: number; files: string[]; sourceDir: string }> {
-    const sourceDir = this.getSourceDir();
+    const sourceDir = await this.getSourceDir();
     try {
       const files = await fs.readdir(sourceDir);
       const imageFiles = files.filter((f) => /^IM\d+/i.test(f));
@@ -392,6 +418,185 @@ export class ImageMergeService {
   }
 
   /**
+   * 지정 폴더의 IM* 파일을 3장씩 묶어 배치 분석 후 JSONL 로그 파일 저장
+   * 로그 위치: {baseDirectory}/batch-analysis.jsonl
+   */
+  async batchAnalyzeFolder(folderPath: string): Promise<{
+    processed: number;
+    skipped: number;
+    logFile: string;
+  }> {
+    const logFile = join(this.baseDirectory, 'batch-analysis.jsonl');
+    const writeStream = await fs.open(logFile, 'w');
+
+    let processed = 0;
+    let skipped = 0;
+
+    try {
+      const entries = await fs.readdir(folderPath);
+      const imFiles = entries
+        .filter(f => /^IM\d+/i.test(f))
+        .sort((a, b) => this.extractNumber(a) - this.extractNumber(b));
+
+      console.log(`[BatchAnalyze] 총 ${imFiles.length}개 파일, ${Math.floor(imFiles.length / 3)}세트 처리 예정`);
+
+      // 3장씩 묶어 처리
+      for (let i = 0; i + 2 < imFiles.length; i += 3) {
+        const triplet = imFiles.slice(i, i + 3);
+        try {
+          // 역할 감지 (channel 수 기반)
+          const metaList = await Promise.all(
+            triplet.map(async f => {
+              const meta = await sharp(join(folderPath, f)).metadata();
+              const stat = await fs.stat(join(folderPath, f));
+              return { file: f, channels: meta.channels ?? 3, size: stat.size };
+            }),
+          );
+
+          const depthEntry = metaList.find(m => m.channels === 1);
+          const colorCandidates = metaList.filter(m => m.channels !== 1).sort((a, b) => a.size - b.size);
+
+          if (!depthEntry || colorCandidates.length < 2) {
+            console.warn(`[BatchAnalyze] 세트 ${i / 3 + 1} 역할 감지 실패, 건너뜀`);
+            skipped++;
+            continue;
+          }
+
+          const colorFile = colorCandidates[0].file;
+          const depthFile = depthEntry.file;
+
+          // analyzeImages 내부 로직 (블롭별 stdev 수집)
+          const blobData = await this.analyzeWithDetail(colorFile, depthFile, folderPath);
+
+          const record = {
+            set: i / 3 + 1,
+            files: triplet,
+            colorFile,
+            depthFile,
+            blobs: blobData.blobs,
+            summary: blobData.summary,
+            coveragePercent: blobData.coveragePercent,
+          };
+
+          await writeStream.write(JSON.stringify(record) + '\n');
+          processed++;
+
+          if (processed % 5 === 0) {
+            console.log(`[BatchAnalyze] ${processed}세트 완료...`);
+          }
+        } catch (err) {
+          console.warn(`[BatchAnalyze] 세트 ${i / 3 + 1} 오류:`, err);
+          skipped++;
+        }
+      }
+    } finally {
+      await writeStream.close();
+    }
+
+    console.log(`[BatchAnalyze] 완료 — 처리: ${processed}, 건너뜀: ${skipped}, 로그: ${logFile}`);
+    return { processed, skipped, logFile };
+  }
+
+  /** analyzeImages와 동일하지만 블롭별 상세 stdev 데이터 반환 */
+  private async analyzeWithDetail(
+    colorFile: string,
+    depthFile: string,
+    sourceDir: string,
+  ): Promise<{
+    blobs: { size: number; mean: number; stdev: number }[];
+    summary: { hubUp: number; flangeUp: number; tilted: number };
+    coveragePercent: number;
+  }> {
+    const colorPath = join(sourceDir, colorFile);
+    const depthPath = join(sourceDir, depthFile);
+
+    const { data: cData, info: cInfo } = await sharp(colorPath)
+      .toColourspace('srgb').raw().toBuffer({ resolveWithObject: true });
+    const W = cInfo.width, H = cInfo.height, CH = cInfo.channels;
+
+    const { data: dData } = await sharp(depthPath)
+      .grayscale().normalise()
+      .resize(W, H, { fit: 'fill' })
+      .raw().toBuffer({ resolveWithObject: true });
+
+    const colorKey = new Int32Array(W * H);
+    let colorPixels = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * CH;
+        const r = cData[i], g = cData[i + 1], b = cData[i + 2];
+        const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+        if (luma > this.blackThreshold) {
+          colorPixels++;
+          colorKey[y * W + x] = (r << 16) | (g << 8) | b;
+        }
+      }
+    }
+    const coveragePercent = Math.round((colorPixels / (W * H)) * 1000) / 10;
+
+    const NOISE_THRESHOLD_PX = 1200;
+    const RELATIVE_THRESHOLD = 0.50;
+    const visited = new Uint8Array(W * H);
+    const colorBlobsMap = new Map<number, number[][]>();
+    const queue: number[] = [];
+
+    for (let start = 0; start < W * H; start++) {
+      if (!colorKey[start] || visited[start]) continue;
+      const targetColor = colorKey[start];
+      queue.length = 0;
+      queue.push(start);
+      visited[start] = 1;
+      const pixels: number[] = [];
+      while (queue.length) {
+        const idx = queue.pop()!;
+        pixels.push(idx);
+        const cx = idx % W, cy = Math.floor(idx / W);
+        for (const [nx, ny] of [[cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1]] as [number,number][]) {
+          if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+          const ni = ny * W + nx;
+          if (!visited[ni] && colorKey[ni] === targetColor) { visited[ni] = 1; queue.push(ni); }
+        }
+      }
+      if (pixels.length >= NOISE_THRESHOLD_PX) {
+        const arr = colorBlobsMap.get(targetColor) ?? [];
+        arr.push(pixels);
+        colorBlobsMap.set(targetColor, arr);
+      }
+    }
+
+    const validBlobs: number[][] = [];
+    for (const blobs of colorBlobsMap.values()) {
+      const maxSize = Math.max(...blobs.map(b => b.length));
+      for (const blob of blobs) {
+        if (blob.length >= maxSize * RELATIVE_THRESHOLD) validBlobs.push(blob);
+      }
+    }
+
+    const TILT_STDEV = 20;
+    const HUB_STDEV  = 8;
+    let hubUp = 0, flangeUp = 0, tilted = 0;
+    const blobResults: { size: number; mean: number; stdev: number }[] = [];
+
+    for (const pixels of validBlobs) {
+      const step = Math.max(1, Math.floor(pixels.length / 500));
+      let sum = 0, count = 0;
+      for (let i = 0; i < pixels.length; i += step) { sum += dData[pixels[i]]; count++; }
+      const mean = sum / count;
+      let sqSum = 0;
+      for (let i = 0; i < pixels.length; i += step) { const d = dData[pixels[i]] - mean; sqSum += d * d; }
+      const stdev = Math.sqrt(sqSum / count);
+
+      if (stdev >= TILT_STDEV) tilted++;
+      else if (stdev >= HUB_STDEV) hubUp++;
+      else flangeUp++;
+
+      blobResults.push({ size: pixels.length, mean: Math.round(mean * 10) / 10, stdev: Math.round(stdev * 100) / 100 });
+    }
+
+    return { blobs: blobResults, summary: { hubUp, flangeUp, tilted }, coveragePercent };
+  }
+
+  /**
    * 3d_raw_data 폴더에서 파일 경로 반환
    */
   getRawFilePath(filename: string): string {
@@ -428,8 +633,10 @@ export class ImageMergeService {
       const W = cInfo.width, H = cInfo.height, CH = cInfo.channels;
 
       // ── depth 이미지 로드 (color와 동일 해상도로 정렬) ──
+      // normalise(): depth 값 범위를 0~255로 정규화 → stdev 의미있는 값 확보
       const { data: dData } = await sharp(depthPath)
         .grayscale()
+        .normalise()
         .resize(W, H, { fit: 'fill' })
         .raw()
         .toBuffer({ resolveWithObject: true });
@@ -452,8 +659,8 @@ export class ImageMergeService {
       const coveragePercent = Math.round((colorPixels / totalPixels) * 1000) / 10;
 
       // ── BFS: 색상 블롭별 픽셀 수집 ──
-      const NOISE_THRESHOLD_PX = 30;
-      const RELATIVE_THRESHOLD = 0.30;
+      const NOISE_THRESHOLD_PX = 1200;  // 실제 부품 최소 크기 기준 (노이즈 파편 제거)
+      const RELATIVE_THRESHOLD = 0.50; // 동일 색상 내 파편 제거 (최대 블롭의 50% 미만 제외)
       const visited = new Uint8Array(W * H);
       const colorBlobsMap = new Map<number, number[][]>();
       const queue: number[] = [];
@@ -499,9 +706,12 @@ export class ImageMergeService {
       //   정방향(Hub Up)   : 허브 상면 + 플랜지 면 → 두 높이 레벨 → stdev 중간
       //   역방향(Flange Up): 평탄한 플랜지 상면 → stdev 낮음
       //   기울어짐(Tilted) : 부품 전체가 기울어짐 → stdev 높음
-      const TILT_STDEV = 22;
-      const HUB_STDEV  = 8;
+      const TILT_STDEV = 20; // stdev ≥ 20 → Tilted  (배치 분석 P70≈18, P80≈22 기준)
+      const HUB_STDEV  = 8;  // stdev ≥  8 → Hub Up  (배치 분석 P30≈8.5 자연 경계)
       let hubUp = 0, flangeUp = 0, tilted = 0;
+
+      console.log(`[Analyze] 유효 블롭 수: ${validBlobs.length} (TILT≥${TILT_STDEV}, HUB≥${HUB_STDEV})`);
+      const stdevList: number[] = [];
 
       for (const pixels of validBlobs) {
         // 최대 500픽셀 stride 샘플링 (성능)
@@ -513,9 +723,21 @@ export class ImageMergeService {
         for (let i = 0; i < pixels.length; i += step) { const d = dData[pixels[i]] - mean; sqSum += d * d; }
         const stdev = Math.sqrt(sqSum / count);
 
-        if (stdev >= TILT_STDEV)     tilted++;
-        else if (stdev >= HUB_STDEV) hubUp++;
-        else                          flangeUp++;
+        let label: string;
+        if (stdev >= TILT_STDEV)     { tilted++;   label = 'Tilted'; }
+        else if (stdev >= HUB_STDEV) { hubUp++;    label = 'HubUp'; }
+        else                         { flangeUp++;  label = 'FlangeUp'; }
+
+        stdevList.push(stdev);
+        console.log(`[Blob] size=${pixels.length}px, mean=${mean.toFixed(1)}, stdev=${stdev.toFixed(2)} → ${label}`);
+      }
+
+      if (stdevList.length > 0) {
+        const avg = stdevList.reduce((a, b) => a + b, 0) / stdevList.length;
+        const min = Math.min(...stdevList);
+        const max = Math.max(...stdevList);
+        console.log(`[Analyze] stdev 요약 — min=${min.toFixed(2)}, max=${max.toFixed(2)}, avg=${avg.toFixed(2)}`);
+        console.log(`[Analyze] 결과 — HubUp=${hubUp}, FlangeUp=${flangeUp}, Tilted=${tilted}`);
       }
 
       // ── depth 전체 분포 지수 ──

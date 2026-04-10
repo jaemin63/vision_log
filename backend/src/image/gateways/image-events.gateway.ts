@@ -8,6 +8,17 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { getCorsOriginOption } from '../../config/cors';
+
+interface AnalysisStatsPayload {
+  coveragePercent: number;
+  depthScore: number;
+  orientationStats: {
+    hubUp: number;
+    flangeUp: number;
+    tilted: number;
+  };
+}
 
 /**
  * WebSocket Gateway for Image Events
@@ -40,7 +51,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 @WebSocketGateway({
   namespace: '/events',
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
+    origin: getCorsOriginOption(),
     credentials: true,
   },
 })
@@ -89,11 +100,18 @@ export class ImageEventsGateway
    * and broadcast to all connected WebSocket clients
    */
   @OnEvent('image.event.3d')
-  handleImage3dEvent(payload: { filename: string; timestamp: Date }) {
+  handleImage3dEvent(payload: {
+    filename: string;
+    timestamp: Date;
+    forced?: boolean;
+    stats?: AnalysisStatsPayload;
+  }) {
     const eventData = {
       type: 'image-event-3d',
       filename: payload.filename,
       timestamp: payload.timestamp,
+      forced: payload.forced ?? false,
+      stats: payload.stats,
     };
 
     // Broadcast to all connected clients

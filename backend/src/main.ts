@@ -1,13 +1,14 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { json } from 'express';
+import { getCorsOriginOption } from './config/cors';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
   // Enable CORS for frontend
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
+    origin: getCorsOriginOption(),
     credentials: true,
   });
 
@@ -15,9 +16,10 @@ async function bootstrap() {
   app.use(json());
 
   const port = process.env.PORT || 3000;
-  await app.listen(port);
-  console.log(`Application is running on: http://localhost:${port}`);
-  console.log(`WebSocket events available at: ws://localhost:${port}/events`);
+  const host = process.env.HOST || '0.0.0.0';
+  await app.listen(port, host);
+  console.log(`Application is running on: http://${host}:${port}`);
+  console.log(`WebSocket events available at: ws://${host}:${port}/events`);
 }
 
 bootstrap();

@@ -54,6 +54,10 @@ export class ModbusImageEventService
   private modbusUnitId = 1;
   private modbusRegister = 0;
   private pollIntervalMs = 1000;
+  private statusRegister = 0;
+  private statusMessages: Record<string, string> = {};
+  private statusValue = 0;
+  private statusMessage = '';
 
   constructor(
     @Inject(PollingConfigService)
@@ -63,10 +67,8 @@ export class ModbusImageEventService
   ) {}
 
   async onModuleInit() {
-    const config = this.configService.getConfig();
-    if (config.modbus.enabled) {
-      await this.start();
-    }
+    // 자동 시작하지 않음 — Auto 모드 버튼을 눌러야 폴링이 시작됨
+    console.log('[Modbus] 서비스 준비됨 (Auto 모드 전환 시 폴링 시작)');
   }
 
   async onModuleDestroy() {
@@ -90,6 +92,7 @@ export class ModbusImageEventService
       register: config.modbus.register,
       interval: config.modbus.pollIntervalMs,
       triggers: config.modbus.triggers,
+      statusRegister: config.modbus.statusRegister,
     });
 
     // 설정 저장
@@ -100,10 +103,20 @@ export class ModbusImageEventService
     this.pollIntervalMs = config.modbus.pollIntervalMs;
     this.registerType   = config.modbus.registerType;
     this.triggers       = config.modbus.triggers || [{ type: 'transition', from: 0, to: 1 }];
+    this.statusRegister = config.modbus.statusRegister ?? 0;
+    this.statusMessages = config.modbus.statusMessages ?? {};
+    this.statusValue    = 0;
+    this.statusMessage  = this.resolveMessage(0);
     this.previousValue  = 0;
     this.isProcessing   = false;
     this.running        = true;
     this.error          = undefined;
+
+    if (this.statusRegister > 0) {
+      console.log(
+        `[Modbus] status polling enabled: ${this.registerType}[${this.statusRegister}]`,
+      );
+    }
 
     // 최초 연결 시도
     await this.connectModbus();
@@ -147,7 +160,13 @@ export class ModbusImageEventService
       isProcessing:   this.isProcessing,
       registerType:   this.registerType,
       triggers:       this.triggers,
+      statusValue:    this.statusValue,
+      statusMessage:  this.statusMessage,
     };
+  }
+
+  private resolveMessage(value: number): string {
+    return this.statusMessages[String(value)] ?? `R[${this.statusRegister}]=${value}`;
   }
 
   async manualTrigger(): Promise<{ success: boolean; message: string }> {
@@ -277,6 +296,28 @@ export class ModbusImageEventService
         if (triggered) {
           console.log(`[Modbus] 트리거 조건 충족: ${this.describeTrigger(triggered)}`);
           await this.triggerImageMerge();
+        }
+
+        if (this.statusRegister > 0) {
+          try {
+            const sv = await this.readRegister(this.statusRegister);
+            const nextMessage = this.resolveMessage(sv);
+            const changed =
+              this.statusValue !== sv || this.statusMessage !== nextMessage;
+            this.statusValue = sv;
+            this.statusMessage = nextMessage;
+            console.log(
+              `[Modbus] status ${this.registerType}[${this.statusRegister}] = ${sv} -> ${nextMessage}${changed ? ' (changed)' : ''}`,
+            );
+          } catch (statusError) {
+            const msg =
+              statusError instanceof Error
+                ? statusError.message
+                : String(statusError);
+            console.warn(
+              `[Modbus] failed to read status ${this.registerType}[${this.statusRegister}]: ${msg}`,
+            );
+          }
         }
 
         this.previousValue = currentValue;
